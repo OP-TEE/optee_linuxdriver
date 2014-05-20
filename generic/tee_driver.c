@@ -193,6 +193,8 @@ static int tee_share_mmap(struct file *filp, struct vm_area_struct *vma)
 		if (remap_pfn_range(vma, vma->vm_start,
 				    shmint->paddr >> PAGE_SHIFT, size, prot))
 			return -EAGAIN;
+		BUG_ON(vma->vm_private_data != NULL);
+		vma->vm_private_data = (void *)shmint->paddr;
 	}
 
 	return 0;

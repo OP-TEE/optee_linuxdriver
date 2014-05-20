@@ -82,14 +82,17 @@ enum teec_rpc_result tee_supp_cmd(struct tee_targetop *op,
 
 			memcpy(&rpc->commToUser, data, datalen);
 
-			dev_dbg(dev, "Supplicant Cmd: %x\n",
-				rpc->commToUser.cmd);
-
 			mutex_unlock(&rpc->outsync);
+
+			dev_dbg(dev, "Supplicant Cmd: %x. Give hand to supplicant\n",
+					rpc->commToUser.cmd);
 
 			up(&rpc->datatouser);
 
 			down(&rpc->datafromuser);
+
+			dev_dbg(dev, "Supplicant Cmd: %x. Give hand to fw\n",
+					rpc->commToUser.cmd);
 
 			mutex_lock(&rpc->insync);
 
@@ -177,8 +180,9 @@ int tee_supp_write(struct file *filp, const char __user *buffer,
 					     (unsigned long)rpc->commFromUser.
 					     cmds[i].buffer);
 				if (vma != NULL) {
+
 					unsigned long paddr =
-					vma->vm_pgoff << PAGE_SHIFT;
+					    (unsigned long)vma->vm_private_data;
 
 					dev_dbg(dev, " gid2pa(0x%p => %lx)\n",
 						rpc->

@@ -354,23 +354,22 @@ static unsigned long tee_shm_iscontinuous(
 		if (isPhysicalAddr(dev, paddr))
 			return paddr;
 	} else {
+		void *paddr = vma->vm_private_data;
 		/* It's a VMA => consider it a a user address */
 		if (!(vma->vm_flags & (VM_IO | VM_PFNMAP))) {
-			dev_err(dev, "[%s] 0x%p not Contiguous %x\n", __func__,
-				vaddr,
-				(unsigned int)(vma->vm_pgoff << PAGE_SHIFT));
+			dev_err(dev, "[%s] 0x%p not Contiguous %p\n", __func__,
+				vaddr, paddr);
 			return 0x0;
 		}
 
 		if (vma->vm_end - vma->vm_start < size) {
-			dev_err(dev, "[%s] 0x%p not big enough %x %ld %ld\n",
-				__func__, vaddr,
-					(u32)(vma->vm_pgoff << PAGE_SHIFT),
+			dev_err(dev, "[%s] 0x%p not big enough %p %ld %ld\n",
+					__func__, vaddr, paddr,
 					vma->vm_end - vma->vm_start, size);
 			return 0x0;
 		}
 
-		return (unsigned long)(vma->vm_pgoff << PAGE_SHIFT);
+		return (unsigned long)paddr;
 	}
 
 	return 0x0;
