@@ -106,7 +106,7 @@ void tee_shm_pool_dump(struct device *dev, struct shm_pool *pool,
 		return;
 
 	dev_info(dev,
-		 "tee_shm_pool_dump() poolH(0x%p) pAddr=0x%p vAddr=0x%p size=%d used=%d(%d%%)\n",
+		 "tee_shm_pool_dump() poolH(0x%p) pAddr=0x%p vAddr=0x%p size=%zu used=%zu(%zu%%)\n",
 		 (void *)pool,
 		 (void *)pool->paddr,
 		 (void *)pool->vaddr,
@@ -123,7 +123,7 @@ void tee_shm_pool_dump(struct device *dev, struct shm_pool *pool,
 			 "  |-[@]        next       prev       pAddr      size     refCount\n");
 
 		list_for_each_entry(chunk, &pool->mchunks, node) {
-			dev_info(dev, "  | [0x%p] 0x%p 0x%p 0x%p %08d %d\n",
+			dev_info(dev, "  | [0x%p] 0x%p 0x%p 0x%p %08zu %d\n",
 				 (void *)chunk,
 				 (void *)chunk->node.next,
 				 (void *)chunk->node.prev,
@@ -168,9 +168,8 @@ struct shm_pool *tee_shm_pool_create(struct device *dev, size_t shm_size,
 	if (WARN_ON(!dev))
 		goto alloc_failed;
 
-	dev_dbg(dev, "> vaddr=0x%p, paddr=0x%p, size=%dKiB\n",
-		shm_vaddr, (void *)shm_paddr,
-		shm_size/1024);
+	dev_dbg(dev, "> vaddr=0x%p, paddr=0x%lx, size=%zuKiB\n",
+		shm_vaddr, shm_paddr, shm_size/1024);
 
 	/* Alloc and initialize the shm_pool structure */
 	pool = _KMALLOC(sizeof(struct shm_pool), GFP_KERNEL);
@@ -395,7 +394,7 @@ unsigned long tee_shm_pool_alloc(struct device *dev,
 	if (WARN_ON(!dev || !pool))
 		return 0UL;
 
-	dev_dbg(dev, "> poolH(0x%p) size=0x%x align=0x%x\n",
+	dev_dbg(dev, "> poolH(0x%p) size=0x%zx align=0x%zx\n",
 		pool, size, alignment);
 
 	/* Align on cache line of the target */
@@ -460,7 +459,7 @@ unsigned long tee_shm_pool_alloc(struct device *dev,
 			betterchunk->size -= prev_chunk->size;
 
 			dev_dbg(dev,
-				"create p_chunkH=0x%p paddr=0x%p (s=%d)\n",
+				"create p_chunkH=0x%p paddr=0x%p (s=%zu)\n",
 				(void *)prev_chunk,
 				(void *)prev_chunk->paddr,
 				prev_chunk->size);
@@ -480,7 +479,7 @@ unsigned long tee_shm_pool_alloc(struct device *dev,
 			next_chunk->size    = betterchunk->size - size;
 
 			dev_dbg(dev,
-				"create n_chunkH=0x%p paddr=0x%p (s=%d)\n",
+				"create n_chunkH=0x%p paddr=0x%p (s=%zu)\n",
 				(void *)next_chunk,
 				(void *)next_chunk->paddr,
 				next_chunk->size);
@@ -503,7 +502,7 @@ unsigned long tee_shm_pool_alloc(struct device *dev,
 #endif
 
 		dev_dbg(dev,
-			"< chunkH=0x%p paddr=%p (s=%d) align=0x%x\n",
+			"< chunkH=0x%p paddr=%p (s=%zu) align=0x%zx\n",
 			(void *)betterchunk,
 			(void *)betterchunk->paddr,
 			betterchunk->size,
@@ -522,7 +521,7 @@ failed_out:
 		_KFREE(next_chunk);
 
 	dev_err(dev,
-		"tee_shm_pool_alloc() FAILED, size=0x%x, align=0x%x free=%d\n",
+		"tee_shm_pool_alloc() FAILED, size=0x%zx, align=0x%zx free=%zu\n",
 		size, alignment, pool->size - pool->used);
 
 #if defined(_DUMP_INFO_ALLOCATOR) && (_DUMP_INFO_ALLOCATOR > 1)

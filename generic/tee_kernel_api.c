@@ -338,18 +338,18 @@ TEEC_Result TEEC_AllocateSharedMemory(TEEC_Context *context,
 	sharedMem->d.shm =
 		tee_shm_allocate(op, NULL, sharedMem->size, sharedMem->flags);
 	if (sharedMem->d.shm == NULL) {
-		pr_err("TEEC_AllocateSharedMemory: tee_shm_allocate(%d) failed\n",
+		pr_err("TEEC_AllocateSharedMemory: tee_shm_allocate(%zu) failed\n",
 		       sharedMem->size);
 		return TEEC_ERROR_OUT_OF_MEMORY;
 	}
 
-	pr_info("TEEC_AllocateSharedMemory (%d) => paddr = %lx\n",
+	pr_info("TEEC_AllocateSharedMemory (%zu) => paddr = %lx\n",
 		sharedMem->size, sharedMem->d.shm->paddr);
 
 	sharedMem->buffer =
 		ioremap_nocache(sharedMem->d.shm->paddr, sharedMem->size);
 	if (sharedMem->buffer == NULL) {
-		pr_err("TEEC_AllocateSharedMemory: ioremap_nocache(%lx, %d) failed\n",
+		pr_err("TEEC_AllocateSharedMemory: ioremap_nocache(%lx, %zu) failed\n",
 		       sharedMem->d.shm->paddr, sharedMem->size);
 		tee_shm_unallocate(sharedMem->d.shm);
 		return TEEC_ERROR_OUT_OF_MEMORY;

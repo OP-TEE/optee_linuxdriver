@@ -41,8 +41,8 @@ enum teec_rpc_result tee_supp_cmd(struct tee_targetop *op,
 	size_t size; /* size of block */
 	struct task_struct *task = current;
 
-	dev_dbg(dev, "> tgid:[%d] op:[0x%p] id:[0x%p]\n",
-		task->tgid, (void *)op, (void *)id);
+	dev_dbg(dev, "> tgid:[%d] op:[0x%p] id:[0x%x]\n",
+		task->tgid, (void *)op, id);
 
 	switch (id) {
 	case TEE_RPC_ICMD_ALLOCATE:
@@ -114,7 +114,7 @@ enum teec_rpc_result tee_supp_cmd(struct tee_targetop *op,
 	return res;
 }
 
-int tee_supp_read(struct file *filp, char __user *buffer,
+ssize_t tee_supp_read(struct file *filp, char __user *buffer,
 			 size_t length, loff_t *offset)
 {
 	struct tee_session *ts = (struct tee_session *)(filp->private_data);
@@ -149,7 +149,7 @@ int tee_supp_read(struct file *filp, char __user *buffer,
 	return ret;
 }
 
-int tee_supp_write(struct file *filp, const char __user *buffer,
+ssize_t tee_supp_write(struct file *filp, const char __user *buffer,
 			  size_t length, loff_t *offset)
 {
 	struct tee_session *ts = (struct tee_session *)(filp->private_data);
@@ -199,7 +199,7 @@ int tee_supp_write(struct file *filp, const char __user *buffer,
 
 		mutex_unlock(&rpc->insync);
 		up(&rpc->datafromuser);
-		dev_dbg(dev, "< [%d]\n", length);
+		dev_dbg(dev, "< [%zu]\n", length);
 		return length;
 	}
 

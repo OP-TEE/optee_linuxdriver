@@ -587,7 +587,7 @@ TEEC_Result copy_op(struct tee_session *ts, TEEC_Operation *op,
 
 	for (memref = 0; memref < TEEC_CONFIG_PAYLOAD_REF_COUNT; ++memref) {
 		int type = TEEC_PARAM_TYPE_GET(op->paramTypes, memref);
-		dev_dbg(dev, "type [0x%p]\n", (void *)type);
+		dev_dbg(dev, "type [0x%x]\n", type);
 
 		switch (type) {
 		case TEEC_NONE:
@@ -771,7 +771,7 @@ TEEC_Result uncopy_op(struct tee_session *ts, TEEC_Operation *op,
 
 	for (memref = 0; memref < TEEC_CONFIG_PAYLOAD_REF_COUNT; ++memref) {
 		int type = TEEC_PARAM_TYPE_GET(op->paramTypes, memref);
-		dev_dbg(dev, "type [0x%p]\n", (void *)type);
+		dev_dbg(dev, "type [0x%x]\n", type);
 		switch (type) {
 		case TEEC_NONE:
 		case TEEC_VALUE_INPUT:

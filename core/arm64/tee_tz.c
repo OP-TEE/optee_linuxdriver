@@ -36,6 +36,7 @@
 #include "tee_tz.h"
 #include <arm_common/teesmc.h>
 #include <arm_common/teesmc_st.h>
+#include "handle.h"
 
 #define DEV	(tee_tz_miscdev.this_device)
 
@@ -58,16 +59,20 @@ static struct miscdevice tee_tz_miscdev;
 
 static bool tee_tz_ready;
 
+static struct handle_db shm_handle_db = HANDLE_DB_INITIALIZER;
+
+
 /*******************************************************************
  * Calling TEE
  *******************************************************************/
 
-static u32 handle_rpc(struct smc_param *param)
+static u32 handle_rpc(struct smc_param64 *param)
 {
 	switch (TEESMC_RETURN_GET_RPC_FUNC(param->a0)) {
 	case TEESMC_RPC_FUNC_ALLOC_ARG:
 		param->a1 = tee_shm_pool_alloc(DEV, TZop.Allocator,
 					param->a1, 4);
+		break;
 	case TEESMC_RPC_FUNC_ALLOC_PAYLOAD:
 		/* Can't support payload shared memory with this interface */
 		param->a2 = 0;
@@ -81,19 +86,32 @@ static u32 handle_rpc(struct smc_param *param)
 	case TEESMC_ST_RPC_FUNC_ALLOC_PAYLOAD:
 	{
 		struct tee_shm *shm;
+		int cookie;
 
 		shm = tee_shm_allocate(&TZop, 0, param->a1, 0);
 		if (!shm) {
 			param->a1 = 0;
 			break;
 		}
+
+		cookie = handle_get(&shm_handle_db, shm);
+		if (cookie < 0) {
+			tee_shm_unallocate(shm);
+			param->a1 = 0;
+			break;
+		}
 		param->a1 = shm->paddr;
-		param->a2 = (uint32_t)shm;
+		param->a2 = cookie;
 		break;
 	}
 	case TEESMC_ST_RPC_FUNC_FREE_PAYLOAD:
-		if (param->a1)
-			tee_shm_unallocate((struct tee_shm *)param->a1);
+		if (param->a1) {
+			struct tee_shm *shm;
+
+			shm = handle_put(&shm_handle_db, param->a1);
+			if (shm)
+				tee_shm_unallocate(shm);
+		}
 		break;
 	case TEESMC_RPC_FUNC_IRQ:
 		break;
@@ -123,7 +141,8 @@ static u32 handle_rpc(struct smc_param *param)
 		inv.res = TEEC_ERROR_NOT_IMPLEMENTED;
 		inv.nbr_bf = arg32->num_params;
 		for (n = 0; n < arg32->num_params; n++) {
-			inv.cmds[n].buffer = (void *)params[n].u.memref.buf_ptr;
+			inv.cmds[n].buffer =
+				(void *)(uintptr_t)params[n].u.memref.buf_ptr;
 			inv.cmds[n].size = params[n].u.memref.size;
 			switch (params[n].attr & TEESMC_ATTR_TYPE_MASK) {
 			case TEESMC_ATTR_TYPE_VALUE_INPUT:
@@ -161,7 +180,7 @@ static u32 handle_rpc(struct smc_param *param)
 				 * instance when loading a TA.
 				 */
 				params[n].u.memref.buf_ptr =
-						(uint32_t)inv.cmds[n].buffer;
+					(uint32_t)(uintptr_t)inv.cmds[n].buffer;
 				params[n].u.memref.size = inv.cmds[n].size;
 				break;
 			default:
@@ -173,7 +192,7 @@ static u32 handle_rpc(struct smc_param *param)
 	}
 	default:
 		dev_warn(DEV, "Unknown RPC func 0x%x\n",
-			 TEESMC_RETURN_GET_RPC_FUNC(param->a0));
+			 (u32)TEESMC_RETURN_GET_RPC_FUNC(param->a0));
 		break;
 	}
 
@@ -188,8 +207,9 @@ static void call_tee(uintptr_t parg32, struct teesmc32_arg *arg32)
 {
 	u32 ret;
 	u32 funcid;
-	struct smc_param param = { 0 };
+	struct smc_param64 param = { 0 };
 
+	/* Note that we're using TEESMC32 calls since OP-TEE is still 32bit */
 	if (irqs_disabled())
 		funcid = TEESMC32_FASTCALL_WITH_ARG;
 	else
@@ -199,12 +219,13 @@ static void call_tee(uintptr_t parg32, struct teesmc32_arg *arg32)
 	while (true) {
 		param.a0 = funcid;
 
-		tee_smc_call(&param);
+		tee_smc_call64(&param);
 		ret = param.a0;
 
 		if (ret == TEESMC_RETURN_EBUSY) {
 			/* "Can't happen" */
-			BUG_ON(1);
+			dev_warn(DEV, "Unexpected return value 0x%x", ret);
+			break;
 		} else if (TEESMC_RETURN_IS_RPC(ret)) {
 			/* Process the RPC. */
 			funcid = handle_rpc(&param);
@@ -393,7 +414,7 @@ static TEEC_Result tee_invoke_command(struct tee_session *ts,
 	uintptr_t parg32;
 	struct teesmc32_param *params32;
 
-	dev_dbg(DEV, "> [%p] [%d]\n", (void *)ts->id, ta_cmd);
+	dev_dbg(DEV, "> [0x%x] [%d]\n", ts->id, ta_cmd);
 
 	arg32 = (typeof(arg32))alloc_tee_arg(&parg32,
 			TEESMC32_GET_ARG_SIZE(TEEC_CONFIG_PAYLOAD_REF_COUNT));
@@ -424,7 +445,7 @@ static TEEC_Result tee_invoke_command(struct tee_session *ts,
 		*origin = arg32->ret_origin;
 
 	free_tee_arg(parg32);
-	dev_dbg(DEV, "< [%p]\n", (void *)ret_tee);
+	dev_dbg(DEV, "< [0x%x]\n", ret_tee);
 	return ret_tee;
 }
 
@@ -448,8 +469,8 @@ static TEEC_Result tee_cancel_command(struct tee_session *ts,
 		return TEEC_ERROR_OUT_OF_MEMORY;
 	}
 
-	dev_dbg(DEV, "> [%p] [%d] [%d]\n",
-		(void *)ts->id, ta_cmd, mutex_is_locked(&g_mutex_teez));
+	dev_dbg(DEV, "> [0x%x] [%d] [%d]\n",
+		ts->id, ta_cmd, mutex_is_locked(&g_mutex_teez));
 
 	memset(arg32, 0, sizeof(*arg32));
 	arg32->cmd = TEESMC_CMD_CANCEL;
@@ -464,7 +485,7 @@ static TEEC_Result tee_cancel_command(struct tee_session *ts,
 		*origin = arg32->ret_origin;
 
 	free_tee_arg(parg32);
-	dev_dbg(DEV, "< [%p]\n", (void *)ret_tee);
+	dev_dbg(DEV, "< [0x%x]\n", ret_tee);
 	return ret_tee;
 }
 
@@ -488,7 +509,7 @@ static TEEC_Result tee_close_session(struct tee_session *ts,
 		return TEEC_ERROR_OUT_OF_MEMORY;
 	}
 
-	dev_dbg(DEV, "> [%p]\n", (void *)ts->id);
+	dev_dbg(DEV, "> [0x%x]\n", ts->id);
 
 	memset(arg32, 0, sizeof(*arg32));
 	arg32->cmd = TEESMC_CMD_CLOSE_SESSION;
@@ -503,7 +524,7 @@ static TEEC_Result tee_close_session(struct tee_session *ts,
 		*origin = arg32->ret_origin;
 
 	free_tee_arg(parg32);
-	dev_dbg(DEV, "< [%p]\n", (void *)ret_tee);
+	dev_dbg(DEV, "< [0x%x]\n", ret_tee);
 	return ret_tee;
 }
 
@@ -514,9 +535,7 @@ static TEEC_Result tee_close_session(struct tee_session *ts,
 /* weak outer_tz_mutex in case not supported by kernel */
 bool __weak outer_tz_mutex(unsigned long *p)
 {
-	if (p != NULL)
-		return false;
-	return true;
+	return !p;
 }
 #endif
 
@@ -525,7 +544,7 @@ static int register_l2cc_mutex(bool reg)
 {
 	unsigned long *vaddr = NULL;
 	int ret = 0;
-	struct smc_param param;
+	struct smc_param64 param;
 	uintptr_t paddr = 0;
 
 	if ((reg == true) && (tz_outer_cache_mutex != NULL)) {
@@ -546,7 +565,7 @@ static int register_l2cc_mutex(bool reg)
 	memset(&param, 0, sizeof(param));
 	param.a0 = TEESMC32_ST_FASTCALL_L2CC_MUTEX;
 	param.a1 = TEESMC_ST_L2CC_MUTEX_GET_ADDR;
-	tee_smc_call(&param);
+	tee_smc_call64(&param);
 
 	if (param.a0 != TEESMC_RETURN_OK) {
 		dev_warn(DEV, "no TZ l2cc mutex service supported\n");
@@ -554,7 +573,7 @@ static int register_l2cc_mutex(bool reg)
 	}
 	paddr = param.a2;
 
-	vaddr = ioremap_cached(paddr, sizeof(u32));
+	vaddr = ioremap_cache(paddr, sizeof(u32));
 	if (vaddr == NULL) {
 		dev_warn(DEV, "TZ l2cc mutex disabled: ioremap failed\n");
 		ret = -ENOMEM;
@@ -569,7 +588,7 @@ static int register_l2cc_mutex(bool reg)
 	memset(&param, 0, sizeof(param));
 	param.a0 = TEESMC32_ST_FASTCALL_L2CC_MUTEX;
 	param.a1 = TEESMC_ST_L2CC_MUTEX_ENABLE;
-	tee_smc_call(&param);
+	tee_smc_call64(&param);
 
 	if (param.a0 != TEESMC_RETURN_OK) {
 		dev_warn(DEV, "TZ l2cc mutex disabled: TZ enable failed\n");
@@ -582,7 +601,7 @@ out:
 		memset(&param, 0, sizeof(param));
 		param.a0 = TEESMC32_ST_FASTCALL_L2CC_MUTEX;
 		param.a1 = TEESMC_ST_L2CC_MUTEX_DISABLE;
-		tee_smc_call(&param);
+		tee_smc_call64(&param);
 		outer_tz_mutex(NULL);
 		if (vaddr)
 			iounmap(vaddr);
@@ -598,7 +617,7 @@ out:
 /* configure_shm - Negotiate Shared Memory configuration with teetz. */
 static int configure_shm(void)
 {
-	struct smc_param param = { 0 };
+	struct smc_param64 param = { 0 };
 	int ret = 0;
 
 	if (shm_paddr)
@@ -606,7 +625,7 @@ static int configure_shm(void)
 
 	mutex_lock(&e_mutex_teez);
 	param.a0 = TEESMC32_ST_FASTCALL_GET_SHM_CONFIG;
-	tee_smc_call(&param);
+	tee_smc_call64(&param);
 	mutex_unlock(&e_mutex_teez);
 
 	if (param.a0 != TEESMC_RETURN_OK) {
@@ -620,7 +639,7 @@ static int configure_shm(void)
 	shm_cached = (bool)param.a3;
 
 	if (shm_cached)
-		shm_vaddr = ioremap_cached(shm_paddr, shm_size);
+		shm_vaddr = ioremap_cache(shm_paddr, shm_size);
 	else
 		shm_vaddr = ioremap_nocache(shm_paddr, shm_size);
 
@@ -634,7 +653,7 @@ static int configure_shm(void)
 			DEV, shm_size, shm_vaddr, shm_paddr);
 
 	if (!TZop.Allocator) {
-		dev_err(DEV, "shm pool creation failed (%d)", shm_size);
+		dev_err(DEV, "shm pool creation failed (%zu)", shm_size);
 		ret = -EINVAL;
 		goto out;
 	}
@@ -645,7 +664,7 @@ out:
 	if (ret)
 		shm_paddr = 0;
 
-	dev_dbg(DEV, "teetz shm: ret=%d pa=0x%lX va=0x%p size=%d, %scached",
+	dev_dbg(DEV, "teetz shm: ret=%d pa=0x%lX va=0x%p size=%zu, %scached",
 		ret, shm_paddr, shm_vaddr, shm_size,
 			shm_cached == 1 ? "" : "un");
 	return ret;
@@ -727,10 +746,10 @@ struct tee_targetop TZop = {
 
 static bool teesmc_api_uid_is_st(void)
 {
-	struct smc_param param = { .a0 = TEESMC32_CALLS_UID };
+	struct smc_param64 param = { .a0 = TEESMC32_CALLS_UID };
 
 	mutex_lock(&e_mutex_teez);
-	tee_smc_call(&param);
+	tee_smc_call64(&param);
 	mutex_unlock(&e_mutex_teez);
 
 	if (param.a0 == TEESMC_ST_UID_R0 && param.a1 == TEESMC_ST_UID_R1 &&
@@ -743,10 +762,10 @@ static bool teesmc_api_uid_is_st(void)
 
 static bool teesmc_os_uuid_is_optee(void)
 {
-	struct smc_param param = { .a0 = TEESMC32_CALL_GET_OS_UUID };
+	struct smc_param64 param = { .a0 = TEESMC32_CALL_GET_OS_UUID };
 
 	mutex_lock(&e_mutex_teez);
-	tee_smc_call(&param);
+	tee_smc_call64(&param);
 	mutex_unlock(&e_mutex_teez);
 
 	if (param.a0 == TEESMC_OS_OPTEE_UUID_R0 &&

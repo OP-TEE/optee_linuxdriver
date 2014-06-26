@@ -180,7 +180,7 @@ static int tee_share_mmap(struct file *filp, struct vm_area_struct *vma)
 	pgprot_t prot;
 
 	if (shmint != NULL) {
-		dev_dbg(dev, "[%s] %x => %x (+%d)\n", __func__,
+		dev_dbg(dev, "[%s] %x => %x (+%zu)\n", __func__,
 			(unsigned int)shmint->
 				paddr, (unsigned int)vma->vm_start,
 			size);
@@ -294,7 +294,7 @@ static long tee_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 	__u32 state;
 	int ret = 0;
 
-	dev_dbg(dev, "> cmd:[0x%p]\n", (void *)cmd);
+	dev_dbg(dev, "> cmd:[0x%x]\n", cmd);
 
 	mutex_lock(&ts->syncstate);
 	state = ts->state;
