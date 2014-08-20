@@ -51,7 +51,10 @@ static void *tz_outer_cache_mutex;
 
 /* protect concurrent access to the tee-tz: inits, entry */
 static DEFINE_MUTEX(g_mutex_teez);
+
 static DEFINE_MUTEX(e_mutex_teez);
+static DECLARE_COMPLETION(e_comp_teez);
+static int e_num_waiters;
 
 /* device data */
 struct tee_driver tee_tz_data;
@@ -65,6 +68,164 @@ static struct handle_db shm_handle_db = HANDLE_DB_INITIALIZER;
 /*******************************************************************
  * Calling TEE
  *******************************************************************/
+
+static void e_lock_teez(void)
+{
+	mutex_lock(&e_mutex_teez);
+}
+
+static void e_lock_wait_completion_teez(void)
+{
+	/*
+	 * Release the lock until "something happens" and then reacquire it
+	 * again.
+	 *
+	 * This is needed when TEE returns "busy" and we need to try again
+	 * later.
+	 */
+	e_num_waiters++;
+	mutex_unlock(&e_mutex_teez);
+	/*
+	 * Wait at most one second. Secure world is normally never busy
+	 * more than that so we should normally never timeout.
+	 */
+	wait_for_completion_timeout(&e_comp_teez, HZ);
+	mutex_lock(&e_mutex_teez);
+	e_num_waiters--;
+}
+
+static void e_unlock_teez(void)
+{
+	/*
+	 * If at least one thread is waiting for "something to happen" let
+	 * one thread know that "something has happened".
+	 */
+	if (e_num_waiters)
+		complete(&e_comp_teez);
+	mutex_unlock(&e_mutex_teez);
+}
+
+static void handle_rpc_func_cmd_mutex_wait(struct teesmc32_arg *arg32)
+{
+	struct teesmc32_param *params;
+
+	if (arg32->num_params != 2)
+		goto bad;
+
+	params = TEESMC32_GET_PARAMS(arg32);
+
+	if ((params[0].attr & TEESMC_ATTR_TYPE_MASK) !=
+			TEESMC_ATTR_TYPE_VALUE_INPUT)
+		goto bad;
+	if ((params[1].attr & TEESMC_ATTR_TYPE_MASK) !=
+			TEESMC_ATTR_TYPE_VALUE_INPUT)
+		goto bad;
+
+	switch (params[0].u.value.a) {
+	case TEE_MUTEX_WAIT_SLEEP:
+		tee_mutex_wait_sleep(DEV, params[1].u.value.a,
+				     params[1].u.value.b);
+		break;
+	case TEE_MUTEX_WAIT_WAKEUP:
+		tee_mutex_wait_wakeup(DEV, params[1].u.value.a,
+				      params[1].u.value.b);
+		break;
+	case TEE_MUTEX_WAIT_DELETE:
+		tee_mutex_wait_delete(DEV, params[1].u.value.a);
+		break;
+	default:
+		goto bad;
+	}
+
+	arg32->ret = TEEC_SUCCESS;;
+	return;
+bad:
+	arg32->ret = TEEC_ERROR_BAD_PARAMETERS;
+}
+
+static void handle_rpc_func_cmd_to_supplicant(struct teesmc32_arg *arg32)
+{
+	struct teesmc32_param *params;
+	struct tee_rpc_invoke inv;
+	size_t n;
+	uint32_t ret;
+
+	if (arg32->num_params > TEE_RPC_BUFFER_NUMBER) {
+		arg32->ret = TEEC_ERROR_GENERIC;
+		return;
+	}
+
+	params = TEESMC32_GET_PARAMS(arg32);
+
+	memset(&inv, 0, sizeof(inv));
+	inv.cmd = arg32->cmd;
+	/*
+	 * Set a suitable error code in case tee-supplicant
+	 * ignores the request.
+	 */
+	inv.res = TEEC_ERROR_NOT_IMPLEMENTED;
+	inv.nbr_bf = arg32->num_params;
+	for (n = 0; n < arg32->num_params; n++) {
+		inv.cmds[n].buffer =
+			(void *)(uintptr_t)params[n].u.memref.buf_ptr;
+		inv.cmds[n].size = params[n].u.memref.size;
+		switch (params[n].attr & TEESMC_ATTR_TYPE_MASK) {
+		case TEESMC_ATTR_TYPE_VALUE_INPUT:
+		case TEESMC_ATTR_TYPE_VALUE_OUTPUT:
+		case TEESMC_ATTR_TYPE_VALUE_INOUT:
+			inv.cmds[n].type = TEE_RPC_VALUE;
+			break;
+		case TEESMC_ATTR_TYPE_MEMREF_INPUT:
+		case TEESMC_ATTR_TYPE_MEMREF_OUTPUT:
+		case TEESMC_ATTR_TYPE_MEMREF_INOUT:
+			inv.cmds[n].type = TEE_RPC_BUFFER;
+			break;
+		default:
+			arg32->ret = TEEC_ERROR_GENERIC;
+			return;
+		}
+	}
+
+	ret = tee_supp_cmd(&TZop, TEE_RPC_ICMD_INVOKE,
+				  &inv, sizeof(inv));
+	if (ret == TEEC_RPC_OK)
+		arg32->ret = inv.res;
+
+	for (n = 0; n < arg32->num_params; n++) {
+		switch (params[n].attr & TEESMC_ATTR_TYPE_MASK) {
+		case TEESMC_ATTR_TYPE_VALUE_INPUT:
+		case TEESMC_ATTR_TYPE_VALUE_OUTPUT:
+		case TEESMC_ATTR_TYPE_VALUE_INOUT:
+		case TEESMC_ATTR_TYPE_MEMREF_OUTPUT:
+		case TEESMC_ATTR_TYPE_MEMREF_INOUT:
+			/*
+			 * Allow supplicant to assign a new pointer
+			 * to an out-buffer. Needed when the
+			 * supplicant allocates a new buffer, for
+			 * instance when loading a TA.
+			 */
+			params[n].u.memref.buf_ptr =
+					(uint32_t)(uintptr_t)inv.cmds[n].buffer;
+			params[n].u.memref.size = inv.cmds[n].size;
+			break;
+		default:
+			break;
+		}
+	}
+}
+
+static void handle_rpc_func_cmd(u32 parg32)
+{
+	struct teesmc32_arg *arg32;
+
+	arg32 = tee_shm_pool_p2v(DEV, TZop.Allocator, parg32);
+
+	if (arg32->cmd == TEE_RPC_MUTEX_WAIT)
+		handle_rpc_func_cmd_mutex_wait(arg32);
+	else
+		handle_rpc_func_cmd_to_supplicant(arg32);
+
+}
 
 static u32 handle_rpc(struct smc_param64 *param)
 {
@@ -116,87 +277,14 @@ static u32 handle_rpc(struct smc_param64 *param)
 	case TEESMC_RPC_FUNC_IRQ:
 		break;
 	case TEESMC_RPC_FUNC_CMD:
-	{
-		struct teesmc32_arg *arg32;
-		struct teesmc32_param *params;
-		struct tee_rpc_invoke inv;
-		size_t n;
-		uint32_t ret;
-
-		arg32 = tee_shm_pool_p2v(DEV, TZop.Allocator, param->a1);
-
-		if (arg32->num_params > TEE_RPC_BUFFER_NUMBER) {
-			arg32->ret = TEEC_ERROR_GENERIC;
-			goto out;
-		}
-
-		params = TEESMC32_GET_PARAMS(arg32);
-
-		memset(&inv, 0, sizeof(inv));
-		inv.cmd = arg32->cmd;
-		/*
-		 * Set a suitable error code in case tee-supplicant
-		 * ignores the request.
-		 */
-		inv.res = TEEC_ERROR_NOT_IMPLEMENTED;
-		inv.nbr_bf = arg32->num_params;
-		for (n = 0; n < arg32->num_params; n++) {
-			inv.cmds[n].buffer =
-				(void *)(uintptr_t)params[n].u.memref.buf_ptr;
-			inv.cmds[n].size = params[n].u.memref.size;
-			switch (params[n].attr & TEESMC_ATTR_TYPE_MASK) {
-			case TEESMC_ATTR_TYPE_VALUE_INPUT:
-			case TEESMC_ATTR_TYPE_VALUE_OUTPUT:
-			case TEESMC_ATTR_TYPE_VALUE_INOUT:
-				inv.cmds[n].type = TEE_RPC_VALUE;
-				break;
-			case TEESMC_ATTR_TYPE_MEMREF_INPUT:
-			case TEESMC_ATTR_TYPE_MEMREF_OUTPUT:
-			case TEESMC_ATTR_TYPE_MEMREF_INOUT:
-				inv.cmds[n].type = TEE_RPC_BUFFER;
-				break;
-			default:
-				arg32->ret = TEEC_ERROR_GENERIC;
-				goto out;
-			}
-		}
-
-		ret = tee_supp_cmd(&TZop, TEE_RPC_ICMD_INVOKE,
-					  &inv, sizeof(inv));
-		if (ret == TEEC_RPC_OK)
-			arg32->ret = inv.res;
-
-		for (n = 0; n < arg32->num_params; n++) {
-			switch (params[n].attr & TEESMC_ATTR_TYPE_MASK) {
-			case TEESMC_ATTR_TYPE_VALUE_INPUT:
-			case TEESMC_ATTR_TYPE_VALUE_OUTPUT:
-			case TEESMC_ATTR_TYPE_VALUE_INOUT:
-			case TEESMC_ATTR_TYPE_MEMREF_OUTPUT:
-			case TEESMC_ATTR_TYPE_MEMREF_INOUT:
-				/*
-				 * Allow supplicant to assign a new pointer
-				 * to an out-buffer. Needed when the
-				 * supplicant allocates a new buffer, for
-				 * instance when loading a TA.
-				 */
-				params[n].u.memref.buf_ptr =
-					(uint32_t)(uintptr_t)inv.cmds[n].buffer;
-				params[n].u.memref.size = inv.cmds[n].size;
-				break;
-			default:
-				break;
-			}
-		}
-
+		handle_rpc_func_cmd(param->a1);
 		break;
-	}
 	default:
 		dev_warn(DEV, "Unknown RPC func 0x%x\n",
 			 (u32)TEESMC_RETURN_GET_RPC_FUNC(param->a0));
 		break;
 	}
 
-out:
 	if (irqs_disabled())
 		return TEESMC32_FASTCALL_RETURN_FROM_RPC;
 	else
@@ -216,6 +304,7 @@ static void call_tee(uintptr_t parg32, struct teesmc32_arg *arg32)
 		funcid = TEESMC32_CALL_WITH_ARG;
 
 	param.a1 = parg32;
+	e_lock_teez();
 	while (true) {
 		param.a0 = funcid;
 
@@ -223,16 +312,24 @@ static void call_tee(uintptr_t parg32, struct teesmc32_arg *arg32)
 		ret = param.a0;
 
 		if (ret == TEESMC_RETURN_EBUSY) {
-			/* "Can't happen" */
-			dev_warn(DEV, "Unexpected return value 0x%x", ret);
-			break;
+			/*
+			 * Since secure world returned busy, release the
+			 * lock we had when entering this function and wait
+			 * for "something to happen" (something else to
+			 * exit from secure world and needed resources may
+			 * have become available).
+			 */
+			e_lock_wait_completion_teez();
 		} else if (TEESMC_RETURN_IS_RPC(ret)) {
 			/* Process the RPC. */
+			e_unlock_teez();
 			funcid = handle_rpc(&param);
+			e_lock_teez();
 		} else {
 			break;
 		}
 	}
+	e_unlock_teez();
 
 	switch (ret) {
 	case TEESMC_RETURN_UNKNOWN_FUNCTION:
@@ -382,9 +479,7 @@ static TEEC_Result tee_open_session(struct tee_session *ts,
 
 	set_params(params32 + num_meta, param_type, params);
 
-	mutex_lock(&e_mutex_teez);
 	call_tee(parg32, arg32);
-	mutex_unlock(&e_mutex_teez);
 
 	ts->id = arg32->session;
 	ret_tee = arg32->ret;
@@ -433,9 +528,7 @@ static TEEC_Result tee_invoke_command(struct tee_session *ts,
 
 	set_params(params32, param_type, params);
 
-	mutex_lock(&e_mutex_teez);
 	call_tee(parg32, arg32);
-	mutex_unlock(&e_mutex_teez);
 
 	ret_tee = arg32->ret;
 
@@ -476,9 +569,7 @@ static TEEC_Result tee_cancel_command(struct tee_session *ts,
 	arg32->cmd = TEESMC_CMD_CANCEL;
 	arg32->session = ts->id;
 
-	mutex_lock(&e_mutex_teez);
 	call_tee(parg32, arg32);
-	mutex_unlock(&e_mutex_teez);
 
 	ret_tee = arg32->ret;
 	if (origin)
@@ -515,9 +606,7 @@ static TEEC_Result tee_close_session(struct tee_session *ts,
 	arg32->cmd = TEESMC_CMD_CLOSE_SESSION;
 	arg32->session = ts->id;
 
-	mutex_lock(&e_mutex_teez);
 	call_tee(parg32, arg32);
-	mutex_unlock(&e_mutex_teez);
 
 	ret_tee = arg32->ret;
 	if (origin)
@@ -553,8 +642,6 @@ static int register_l2cc_mutex(bool reg)
 	}
 	if ((reg == false) && (tz_outer_cache_mutex == NULL))
 		return 0;
-
-	mutex_lock(&e_mutex_teez);
 
 	if (reg == false) {
 		vaddr = tz_outer_cache_mutex;
@@ -608,7 +695,6 @@ out:
 		dev_info(DEV, "outer cache shared mutex disabled\n");
 	}
 
-	mutex_unlock(&e_mutex_teez);
 	dev_dbg(DEV, "teetz outer mutex: ret=%d pa=0x%lX va=0x%p %sabled\n",
 		ret, paddr, vaddr, tz_outer_cache_mutex ? "en" : "dis");
 	return ret;
@@ -623,10 +709,8 @@ static int configure_shm(void)
 	if (shm_paddr)
 		return -EINVAL;
 
-	mutex_lock(&e_mutex_teez);
 	param.a0 = TEESMC32_ST_FASTCALL_GET_SHM_CONFIG;
 	tee_smc_call64(&param);
-	mutex_unlock(&e_mutex_teez);
 
 	if (param.a0 != TEESMC_RETURN_OK) {
 		dev_err(DEV, "shm service not available: %X", (uint)param.a0);
@@ -748,9 +832,7 @@ static bool teesmc_api_uid_is_st(void)
 {
 	struct smc_param64 param = { .a0 = TEESMC32_CALLS_UID };
 
-	mutex_lock(&e_mutex_teez);
 	tee_smc_call64(&param);
-	mutex_unlock(&e_mutex_teez);
 
 	if (param.a0 == TEESMC_ST_UID_R0 && param.a1 == TEESMC_ST_UID_R1 &&
 	    param.a2 == TEESMC_ST_UID_R2 && (param.a3 == TEESMC_ST_UID32_R3 ||
@@ -764,9 +846,7 @@ static bool teesmc_os_uuid_is_optee(void)
 {
 	struct smc_param64 param = { .a0 = TEESMC32_CALL_GET_OS_UUID };
 
-	mutex_lock(&e_mutex_teez);
 	tee_smc_call64(&param);
-	mutex_unlock(&e_mutex_teez);
 
 	if (param.a0 == TEESMC_OS_OPTEE_UUID_R0 &&
 	    param.a1 == TEESMC_OS_OPTEE_UUID_R1 &&

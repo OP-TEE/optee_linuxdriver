@@ -20,6 +20,7 @@
 #include <linux/mutex.h>
 
 #include "tee_supp_com.h"
+#include "tee_mutex_wait.h"
 
 /******************************************************************************/
 
@@ -49,6 +50,7 @@ struct tee_driver {
 	int				count_session;
 	char				*memory_pool;
 	struct	tee_rpc_priv_data	rpc;
+	struct  tee_mutex_wait_private	mutex_wait;
 #if (CFG_TEE_DRV_DEBUGFS == 1)
 	struct	kfifo	cmds;
 #endif

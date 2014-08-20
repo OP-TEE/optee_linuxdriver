@@ -14,7 +14,8 @@ optee-objs:=   \
 		generic/tee_kernel_api.o \
 		generic/tee_supp_com.o \
 		generic/tee_mem.o \
-		generic/tee_op.o
+		generic/tee_op.o \
+		generic/tee_mutex_wait.o
 
 ifeq ($(ARCH),arm)
 ccflags-y+=-iquote$(M)/core/armv7

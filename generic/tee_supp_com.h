@@ -33,6 +33,13 @@
 #define TEE_RPC_VALUE		0x00000002
 #define TEE_RPC_LOAD_TA		0x10000001
 #define TEE_RPC_FREE_TA_WITH_FD	0x10000012
+/* Handled within the driver only */
+#define TEE_RPC_MUTEX_WAIT	0x20000000
+
+/* Parameters for TEE_RPC_WAIT_MUTEX above */
+#define TEE_MUTEX_WAIT_SLEEP	0
+#define TEE_MUTEX_WAIT_WAKEUP	1
+#define TEE_MUTEX_WAIT_DELETE	2
 
 #include <linux/semaphore.h>
 
@@ -77,6 +84,7 @@ struct tee_rpc_priv_data {
 	struct semaphore datafromuser;
 	struct mutex outsync; /* Out sync mutex */
 	struct mutex insync; /* In sync mutex */
+	struct mutex reqsync; /* Request sync mutex */
 };
 
 enum teec_rpc_result {

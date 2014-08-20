@@ -78,6 +78,13 @@ enum teec_rpc_result tee_supp_cmd(struct tee_targetop *op,
 			if (sizeof(rpc->commToUser) < datalen)
 				break;
 
+			/*
+			 * Don't allow interleaved requests (from two
+			 * different threads) as the second request will
+			 * overwrite the first request.
+			 */
+			mutex_lock(&rpc->reqsync);
+
 			mutex_lock(&rpc->outsync);
 
 			memcpy(&rpc->commToUser, data, datalen);
@@ -99,6 +106,8 @@ enum teec_rpc_result tee_supp_cmd(struct tee_targetop *op,
 			memcpy(data, &rpc->commFromUser, datalen);
 
 			mutex_unlock(&rpc->insync);
+
+			mutex_unlock(&rpc->reqsync);
 
 			res = TEEC_RPC_OK;
 
@@ -215,6 +224,7 @@ int tee_supp_init(struct tee_rpc_priv_data *rpc)
 		__SEMAPHORE_INITIALIZER(rpc->datatouser, 0);
 	mutex_init(&rpc->outsync);
 	mutex_init(&rpc->insync);
+	mutex_init(&rpc->reqsync);
 	return 0;
 }
 

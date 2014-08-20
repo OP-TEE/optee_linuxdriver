@@ -34,6 +34,7 @@
 #include "tee_service.h"
 #include "tee_debug.h"
 #include "tee_tz.h"
+#include "tee_mutex_wait.h"
 
 
 #include "tee_driver.h"
@@ -432,19 +433,29 @@ static int __init tee_init(void)
 {
 	int ret = 0;
 	bool tz_init = false;
+	bool supp_init = false;
+	bool wait_init = false;
 
 	ret = tee_tz_init();
 	if (ret)
 		goto err;
+	tz_init = true;
 
 	ret = tee_supp_init(&tee_tz_data.rpc);
-
 	if (ret)
 		goto err;
-	tz_init = true;
+	supp_init = true;
+
+	ret = tee_mutex_wait_init(&tee_tz_data.mutex_wait);
+	if (ret)
+		goto err;
 
 	goto exit;
 err:
+	if (wait_init)
+		tee_mutex_wait_exit(&tee_tz_data.mutex_wait);
+	if (supp_init)
+		tee_supp_exit();
 	if (tz_init)
 		tee_tz_exit();
 exit:
@@ -454,6 +465,8 @@ exit:
 static void __exit tee_exit(void)
 {
 	pr_info("in tee_exit\n");
+
+	tee_mutex_wait_exit(&tee_tz_data.mutex_wait);
 
 	tee_supp_exit();
 

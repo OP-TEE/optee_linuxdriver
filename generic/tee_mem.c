@@ -546,6 +546,7 @@ void tee_shm_pool_free(struct device *dev, struct shm_pool *pool,
 		unsigned long paddr, uint32_t *size)
 {
 	struct mem_chunk *chunk;
+	struct mem_chunk *tmp;
 
 	if (WARN_ON(!dev || !pool))
 		return;
@@ -562,7 +563,7 @@ void tee_shm_pool_free(struct device *dev, struct shm_pool *pool,
 	if (!is_valid_paddr(pool, paddr))
 		goto out_failed;
 
-	list_for_each_entry(chunk, &pool->mchunks, node) {
+	list_for_each_entry_safe(chunk, tmp, &pool->mchunks, node) {
 		if (chunk->paddr == paddr) {
 			if (size != NULL)
 				*size = chunk->size;
