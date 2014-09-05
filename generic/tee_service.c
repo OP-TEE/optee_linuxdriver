@@ -21,6 +21,7 @@
 #include <linux/uaccess.h>
 #include <linux/device.h>
 #include <linux/miscdevice.h>
+#include <linux/highmem.h>
 
 #include "tee-op.h"
 #include "tee_driver.h"
