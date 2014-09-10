@@ -24,6 +24,8 @@
 #include <linux/err.h>
 #include <linux/slab.h>
 #include <linux/moduleparam.h>
+#include <linux/sched.h>
+#include <linux/jiffies.h>
 
 #include <asm/pgtable.h>
 
@@ -143,6 +145,29 @@ bad:
 	arg32->ret = TEEC_ERROR_BAD_PARAMETERS;
 }
 
+static void handle_rpc_func_cmd_wait(struct teesmc32_arg *arg32)
+{
+	struct teesmc32_param *params;
+	u32 msec_to_wait;
+
+	if (arg32->num_params != 1)
+		goto bad;
+
+	params = TEESMC32_GET_PARAMS(arg32);
+	msec_to_wait = params[0].u.value.a;
+
+	/* set task's state to interruptible sleep */
+	set_current_state(TASK_INTERRUPTIBLE);
+
+	/* take a nap */
+	schedule_timeout(msecs_to_jiffies(msec_to_wait));
+
+	arg32->ret = TEEC_SUCCESS;;
+	return;
+bad:
+	arg32->ret = TEEC_ERROR_BAD_PARAMETERS;
+}
+
 static void handle_rpc_func_cmd_to_supplicant(struct teesmc32_arg *arg32)
 {
 	struct teesmc32_param *params;
@@ -220,11 +245,16 @@ static void handle_rpc_func_cmd(u32 parg32)
 
 	arg32 = tee_shm_pool_p2v(DEV, TZop.Allocator, parg32);
 
-	if (arg32->cmd == TEE_RPC_MUTEX_WAIT)
-		handle_rpc_func_cmd_mutex_wait(arg32);
-	else
-		handle_rpc_func_cmd_to_supplicant(arg32);
-
+	switch (arg32->cmd) {
+		case TEE_RPC_MUTEX_WAIT:
+			handle_rpc_func_cmd_mutex_wait(arg32);
+			break;
+		case TEE_RPC_WAIT:
+			handle_rpc_func_cmd_wait(arg32);
+			break;
+		default:
+			handle_rpc_func_cmd_to_supplicant(arg32);
+	}
 }
 
 static u32 handle_rpc(struct smc_param64 *param)
