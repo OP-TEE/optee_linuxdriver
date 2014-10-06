@@ -1,25 +1,17 @@
 /*
- * Copyright (c) 2014, STMicroelectronics International N.V.
- *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License Version 2 as
- * published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License along
- * with this program; if not, write to the Free Software Foundation, Inc.,
- * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- */
+* Copyright (C) STMicroelectronics 2014. All rights reserved.
+*
+* This code is STMicroelectronics proprietary and confidential.
+* Any use of the code for whatever purpose is subject to
+* specific written permission of STMicroelectronics SA.
+*/
+
 #ifndef TEE_SUPP_COMM_H
 #define TEE_SUPP_COMM_H
 
-#define TEE_RPC_ICMD_ALLOCATE	0x1001
-#define TEE_RPC_ICMD_FREE	0x1002
-#define TEE_RPC_ICMD_INVOKE	0x1003
+#define TEE_RPC_ICMD_ALLOCATE 0x1001
+#define TEE_RPC_ICMD_FREE     0x1002
+#define TEE_RPC_ICMD_INVOKE   0x1003
 
 #define TEE_RPC_NBR_BUFF 1
 #define TEE_RPC_DATA_SIZE 64
@@ -58,13 +50,13 @@ struct tee_rpc_bf {
 };
 
 struct tee_rpc_alloc {
-	uint32_t size; /* size of block */
-	void *data; /* pointer to data */
-	void *shm; /* pointer to an opaque data, being shm structure */
+	uint32_t size;	/* size of block */
+	void *data;	/* pointer to data */
+	void *shm;	/* pointer to an opaque data, being shm structure */
 };
 
 struct tee_rpc_free {
-	void *shm; /* pointer to an opaque data, being shm structure */
+	void *shm;	/* pointer to an opaque data, being shm structure */
 };
 
 struct tee_rpc_cmd {
@@ -81,7 +73,7 @@ struct tee_rpc_invoke {
 	struct tee_rpc_cmd cmds[TEE_RPC_BUFFER_NUMBER];
 };
 
-struct tee_rpc_priv_data {
+struct tee_rpc {
 	struct tee_rpc_invoke commToUser;
 	struct tee_rpc_invoke commFromUser;
 	struct semaphore datatouser;
@@ -89,6 +81,7 @@ struct tee_rpc_priv_data {
 	struct mutex outsync; /* Out sync mutex */
 	struct mutex insync; /* In sync mutex */
 	struct mutex reqsync; /* Request sync mutex */
+	atomic_t  used;
 };
 
 enum teec_rpc_result {
@@ -96,18 +89,18 @@ enum teec_rpc_result {
 	TEEC_RPC_FAIL
 };
 
-int tee_supp_init(struct tee_rpc_priv_data *rpc);
-void tee_supp_exit(void);
+struct tee;
 
-enum teec_rpc_result tee_supp_cmd(struct tee_targetop *op,
-		uint32_t id, void *data,
-		unsigned int datalen);
+int tee_supp_init(struct tee *tee);
+void tee_supp_deinit(struct tee *tee);
+
+enum teec_rpc_result tee_supp_cmd(struct tee *tee,
+				  uint32_t id, void *data, size_t datalen);
 
 ssize_t tee_supp_read(struct file *filp, char __user *buffer,
-			 size_t length, loff_t *offset);
+		  size_t length, loff_t *offset);
 
 ssize_t tee_supp_write(struct file *filp, const char __user *buffer,
-			  size_t length, loff_t *offset);
-
+		   size_t length, loff_t *offset);
 
 #endif
