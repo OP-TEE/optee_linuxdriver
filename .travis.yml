@@ -1,0 +1,54 @@
+# One may have a look at http://docs.travis-ci.com/user/installing-dependencies/
+
+notifications:
+  - email: true
+
+# Installation of ia32 libs, required by the compiler
+# Installation of bc, required by the kernel
+before_install:
+  - sudo apt-get update -qq
+  - sudo apt-get install -qq --force-yes bc
+  - if [ `uname -m` = x86_64 ]; then sudo apt-get install -qq --force-yes libgd2-xpm ia32-libs ia32-libs-multiarch; fi
+
+before_script:
+  # Store the home repository
+  - export MYHOME=$PWD
+
+  # Download the arm32 compiler
+  - wget http://releases.linaro.org/14.05/components/toolchain/binaries/gcc-linaro-arm-linux-gnueabihf-4.9-2014.05_linux.tar.xz
+  - tar xf gcc-linaro-arm-linux-gnueabihf-4.9-2014.05_linux.tar.xz
+  - export PATH=$PATH:$PWD/gcc-linaro-arm-linux-gnueabihf-4.9-2014.05_linux/bin
+
+  # Download the arm64 compiler
+  - wget http://releases.linaro.org/14.08/components/toolchain/binaries/gcc-linaro-aarch64-linux-gnu-4.9-2014.08_linux.tar.xz
+  - tar xf gcc-linaro-aarch64-linux-gnu-4.9-2014.08_linux.tar.xz
+  - export PATH=$PATH:$PWD/gcc-linaro-aarch64-linux-gnu-4.9-2014.08_linux/bin
+
+  # Download the kernel
+  - git clone --depth 1 -b linux-linaro-lsk git://git.linaro.org/kernel/linux-linaro-stable.git
+  - export DST_KERNEL=$PWD/linux-linaro-stable
+
+script:
+  # Check coding style
+  - git format-patch -1 --stdout | $DST_KERNEL/scripts/checkpatch.pl -
+
+  # Go in the linux kernel repository
+  - cd $DST_KERNEL
+
+  # arm32 compilation
+  - export ARCH=arm
+  - export CROSS_COMPILE=arm-linux-gnueabihf-
+  - echo "CONFIG_MODULES=y" >> arch/arm/configs/multi_v7_defconfig
+  - echo "CONFIG_MODULE_UNLOAD=y" >> arch/arm/configs/multi_v7_defconfig
+  - make multi_v7_defconfig
+  - make -j`getconf _NPROCESSORS_ONLN` zImage
+  - make -j`getconf _NPROCESSORS_ONLN` M=$MYHOME modules
+
+  # arm64 compilation
+  - export ARCH=arm64
+  - export CROSS_COMPILE=aarch64-linux-gnu-
+  - rm -f .config
+  - make defconfig
+  - make -j`getconf _NPROCESSORS_ONLN` all
+  - make -j`getconf _NPROCESSORS_ONLN` M=$MYHOME modules
+
