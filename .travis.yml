@@ -1,23 +1,24 @@
 # One may have a look at http://docs.travis-ci.com/user/installing-dependencies/
 
+language: c
+
 notifications:
   - email: true
 
-# Installation of ia32 libs, required by the compiler
-# Installation of bc, required by the kernel
 before_install:
+  # Install the arm32 cross-compiler
   - sudo apt-get update -qq
-  - sudo apt-get install -qq --force-yes bc
-  - if [ `uname -m` = x86_64 ]; then sudo apt-get install -qq --force-yes libgd2-xpm ia32-libs ia32-libs-multiarch; fi
+  - sudo apt-get install -y gcc-arm-linux-gnueabihf
+  - arm-linux-gnueabihf-gcc --version
+  # Install bc (required by the kernel)
+  - sudo apt-get install bc
+  # Install 32-bit compatibility libraries for the Linaro arm64 cross-compiler
+  # (which is a 32-bit x86 binary)
+  - if [ `uname -m` = x86_64 ]; then sudo apt-get install libc6-i386 lib32stdc++6 lib32z1; fi
 
 before_script:
   # Store the home repository
   - export MYHOME=$PWD
-
-  # Download the arm32 compiler
-  - wget http://releases.linaro.org/14.05/components/toolchain/binaries/gcc-linaro-arm-linux-gnueabihf-4.9-2014.05_linux.tar.xz
-  - tar xf gcc-linaro-arm-linux-gnueabihf-4.9-2014.05_linux.tar.xz
-  - export PATH=$PATH:$PWD/gcc-linaro-arm-linux-gnueabihf-4.9-2014.05_linux/bin
 
   # Download the arm64 compiler
   - wget http://releases.linaro.org/14.08/components/toolchain/binaries/gcc-linaro-aarch64-linux-gnu-4.9-2014.08_linux.tar.xz
