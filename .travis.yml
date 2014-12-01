@@ -31,7 +31,7 @@ before_script:
 
 script:
   # Check coding style
-  - git format-patch -1 --stdout | $DST_KERNEL/scripts/checkpatch.pl -
+  - git format-patch -1 --stdout | $DST_KERNEL/scripts/checkpatch.pl --ignore FILE_PATH_CHANGES --ignore GERRIT_CHANGE_ID -
 
   # Go in the linux kernel repository
   - cd $DST_KERNEL
