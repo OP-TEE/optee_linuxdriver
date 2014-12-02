@@ -16,8 +16,6 @@
  */
 #include <linux/slab.h>
 #include "tee_mutex_wait.h"
-#include "tee-op.h"
-#include "tee_driver.h"
 
 struct tee_mutex_wait {
 	struct list_head link;
@@ -69,10 +67,10 @@ static void tee_mutex_wait_delete_entry(struct tee_mutex_wait *w)
 	kfree(w);
 }
 
-void tee_mutex_wait_delete(struct device *dev, u32 key)
+void tee_mutex_wait_delete(struct device *dev,
+			struct tee_mutex_wait_private *priv,
+			u32 key)
 {
-	struct  tee_mutex_wait_private *priv =
-			&tee_get_drvdata(dev)->mutex_wait;
 	struct tee_mutex_wait *w;
 
 	mutex_lock(&priv->mu);
@@ -86,11 +84,12 @@ void tee_mutex_wait_delete(struct device *dev, u32 key)
 
 	mutex_unlock(&priv->mu);
 }
+EXPORT_SYMBOL(tee_mutex_wait_delete);
 
-void tee_mutex_wait_wakeup(struct device *dev, u32 key, u32 wait_after)
+void tee_mutex_wait_wakeup(struct device *dev,
+			struct tee_mutex_wait_private *priv,
+			u32 key, u32 wait_after)
 {
-	struct  tee_mutex_wait_private *priv =
-			&tee_get_drvdata(dev)->mutex_wait;
 	struct tee_mutex_wait *w = tee_mutex_wait_get(dev, priv, key);
 
 	if (!w)
@@ -101,11 +100,12 @@ void tee_mutex_wait_wakeup(struct device *dev, u32 key, u32 wait_after)
 	mutex_unlock(&w->mu);
 	complete(&w->comp);
 }
+EXPORT_SYMBOL(tee_mutex_wait_wakeup);
 
-void tee_mutex_wait_sleep(struct device *dev, u32 key, u32 wait_tick)
+void tee_mutex_wait_sleep(struct device *dev,
+			struct tee_mutex_wait_private *priv,
+			u32 key, u32 wait_tick)
 {
-	struct  tee_mutex_wait_private *priv =
-			&tee_get_drvdata(dev)->mutex_wait;
 	struct tee_mutex_wait *w = tee_mutex_wait_get(dev, priv, key);
 	u32 wait_after;
 
@@ -119,6 +119,7 @@ void tee_mutex_wait_sleep(struct device *dev, u32 key, u32 wait_tick)
 	if (TICK_GT(wait_tick, wait_after))
 		wait_for_completion_timeout(&w->comp, HZ);
 }
+EXPORT_SYMBOL(tee_mutex_wait_sleep);
 
 int tee_mutex_wait_init(struct tee_mutex_wait_private *priv)
 {
@@ -126,6 +127,7 @@ int tee_mutex_wait_init(struct tee_mutex_wait_private *priv)
 	INIT_LIST_HEAD(&priv->db);
 	return 0;
 }
+EXPORT_SYMBOL(tee_mutex_wait_init);
 
 void tee_mutex_wait_exit(struct tee_mutex_wait_private *priv)
 {
@@ -143,3 +145,4 @@ void tee_mutex_wait_exit(struct tee_mutex_wait_private *priv)
 		tee_mutex_wait_delete_entry(w);
 	}
 }
+EXPORT_SYMBOL(tee_mutex_wait_exit);

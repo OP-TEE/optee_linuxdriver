@@ -14,27 +14,29 @@
  * with this program; if not, write to the Free Software Foundation, Inc.,
  * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
-#include <linux/linkage.h>
+#ifndef TEE_MUTEX_WAIT_H
+#define TEE_MUTEX_WAIT_H
 
-	.text
+#include <linux/mutex.h>
+#include <linux/list.h>
+#include <linux/device.h>
 
-#define SMC_PARAM_X0_OFFS	0
-#define SMC_PARAM_X2_OFFS	16
-#define SMC_PARAM_X4_OFFS	32
-#define SMC_PARAM_X6_OFFS	48
+struct tee_mutex_wait_private {
+	struct mutex mu;
+	struct list_head db;
+};
 
-	/* void tee_smc_call64(struct smc_param64 *param); */
-	.globl	tee_smc_call64
-ENTRY(tee_smc_call64)
-	stp	x28, x30, [sp, #-16]!
-	mov	x28, x0
-	ldp	x0, x1, [x28, #SMC_PARAM_X0_OFFS]
-	ldp	x2, x3, [x28, #SMC_PARAM_X2_OFFS]
-	ldp	x4, x5, [x28, #SMC_PARAM_X4_OFFS]
-	ldp	x6, x7, [x28, #SMC_PARAM_X6_OFFS]
-	smc	#0
-	stp	x0, x1, [x28, #SMC_PARAM_X0_OFFS]
-	stp	x2, x3, [x28, #SMC_PARAM_X2_OFFS]
-	ldp	x28, x30, [sp], #16
-	ret
-ENDPROC(tee_smc_call64)
+int tee_mutex_wait_init(struct tee_mutex_wait_private *priv);
+void tee_mutex_wait_exit(struct tee_mutex_wait_private *priv);
+
+void tee_mutex_wait_delete(struct device *dev,
+			struct tee_mutex_wait_private *priv,
+			u32 key);
+void tee_mutex_wait_wakeup(struct device *dev,
+			struct tee_mutex_wait_private *priv,
+			u32 key, u32 wait_after);
+void tee_mutex_wait_sleep(struct device *dev,
+			struct tee_mutex_wait_private *priv,
+			u32 key, u32 wait_tick);
+
+#endif /*TEE_MUTEX_WAIT_H*/

@@ -23,17 +23,17 @@
  * struct TEEC_Context - Represents a connection between a client application
  * and a TEE.
  */
-typedef struct {
+/*typedef struct {
 	char devname[256];
-} TEEC_Context;
+} TEEC_Context;*/
 
 /**
  * struct TEEC_Session - Represents a connection between a client application
  * and a trusted application.
  */
-typedef struct {
+/*typedef struct {
 	void *session;
-} TEEC_Session;
+} TEEC_Session;*/
 
 /**
  * TEEC_InitializeContext() - Initializes a context holding connection
@@ -95,11 +95,11 @@ TEEC_Result TEEC_FinalizeContext(TEEC_Context *context);
  *
  */
 TEEC_Result TEEC_OpenSession(TEEC_Context *context,
-			     TEEC_Session * session,
-			     const TEEC_UUID * destination,
+			     TEEC_Session *session,
+			     const TEEC_UUID *destination,
 			     uint32_t connectionMethod,
 			     const void *connectionData,
-			     TEEC_Operation * operation,
+			     TEEC_Operation *operation,
 			     uint32_t *returnOrigin);
 
 /**
@@ -129,7 +129,7 @@ void TEEC_CloseSession(TEEC_Session *session);
  */
 TEEC_Result TEEC_InvokeCommand(TEEC_Session *session,
 			       uint32_t commandID,
-			       TEEC_Operation * operation,
+			       TEEC_Operation *operation,
 			       uint32_t *returnOrigin);
 
 /**
@@ -145,7 +145,7 @@ TEEC_Result TEEC_InvokeCommand(TEEC_Session *session,
  * @return TEEC_Result               Something failed.
  */
 TEEC_Result TEEC_RegisterSharedMemory(TEEC_Context *context,
-				      TEEC_SharedMemory * sharedMem);
+				      TEEC_SharedMemory *sharedMem);
 
 /**
  * TEEC_AllocateSharedMemory() - Allocate shared memory for TEE.
@@ -159,7 +159,7 @@ TEEC_Result TEEC_RegisterSharedMemory(TEEC_Context *context,
  * @return TEEC_Result               Something failed.
  */
 TEEC_Result TEEC_AllocateSharedMemory(TEEC_Context *context,
-				      TEEC_SharedMemory * sharedMem);
+				      TEEC_SharedMemory *sharedMem);
 
 /**
  * TEEC_ReleaseSharedMemory() - Free or deregister the shared memory.
@@ -168,6 +168,7 @@ TEEC_Result TEEC_AllocateSharedMemory(TEEC_Context *context,
  */
 void TEEC_ReleaseSharedMemory(TEEC_SharedMemory *sharedMemory);
 
+#if 0
 /**
  * TEEC_RequestCancellation() - Request the cancellation of a pending open
  *                              session or command invocation.
@@ -175,6 +176,7 @@ void TEEC_ReleaseSharedMemory(TEEC_SharedMemory *sharedMemory);
  * @param operation Pointer to an operation previously passed to open session
  *                  or invoke.
  */
-/* void TEEC_RequestCancellation(TEEC_Operation *operation); */
+void TEEC_RequestCancellation(TEEC_Operation *operation);
+#endif
 
 #endif
