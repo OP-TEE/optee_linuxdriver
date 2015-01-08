@@ -44,6 +44,7 @@ script:
   - make multi_v7_defconfig
   - make -j`getconf _NPROCESSORS_ONLN` zImage
   - make -j`getconf _NPROCESSORS_ONLN` M=$MYHOME modules
+  - make -j`getconf _NPROCESSORS_ONLN` CONFIG_TEE_TRACE_PERFORMANCE=y M=$MYHOME modules
 
   # arm64 compilation
   - export ARCH=arm64
@@ -52,4 +53,5 @@ script:
   - make defconfig
   - make -j`getconf _NPROCESSORS_ONLN` all
   - make -j`getconf _NPROCESSORS_ONLN` M=$MYHOME modules
+  - make -j`getconf _NPROCESSORS_ONLN` CONFIG_TEE_TRACE_PERFORMANCE=y M=$MYHOME modules
 
