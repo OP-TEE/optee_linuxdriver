@@ -244,6 +244,8 @@ static void handle_rpc_func_cmd(u32 parg32)
 	struct teesmc32_arg *arg32;
 
 	arg32 = tee_shm_pool_p2v(DEV, TZop.Allocator, parg32);
+	if (!arg32)
+		return;
 
 	switch (arg32->cmd) {
 		case TEE_RPC_MUTEX_WAIT:
