@@ -377,7 +377,7 @@ static unsigned long tee_shm_iscontinuous(
 }
 
 struct tee_shm *tee_shm_allocate(struct tee_targetop *op,
-				 void *vaddr, int size, uint32_t flags)
+				 void *vaddr, size_t size, uint32_t flags)
 {
 	struct device *dev = op->miscdev->this_device;
 	struct tee_shm *shm;
@@ -387,14 +387,7 @@ struct tee_shm *tee_shm_allocate(struct tee_targetop *op,
 	struct tee_driver *tee = NULL;
 	tee = tee_get_drvdata(dev);
 
-	dev_dbg(dev, "> vaddr:[%p] size:[%d]\n", (void *)vaddr, size);
-
-	shm = (struct tee_shm *)devm_kzalloc(dev, sizeof(struct tee_shm),
-					   GFP_KERNEL);
-	if (shm == NULL)
-		return NULL;
-
-	shm->op = op;
+	dev_dbg(dev, "> vaddr:[%p] size:[%zu]\n", (void *)vaddr, size);
 
 	/*
 	 * Adjust the size in case it is 0 as, from the spec:
@@ -411,12 +404,24 @@ struct tee_shm *tee_shm_allocate(struct tee_targetop *op,
 	if ((size % op->page_size) != 0)
 		size = ((size / op->page_size) + 1) * op->page_size;
 
+	if (unlikely(size == 0)) {
+		dev_err(dev, "[%s] requested size too big\n", __func__);
+		return NULL;
+	}
+
+	shm = (struct tee_shm *)devm_kzalloc(dev, sizeof(struct tee_shm),
+					   GFP_KERNEL);
+	if (shm == NULL)
+		return NULL;
+
+	shm->op = op;
+
 	if (vaddr == NULL) {
 		shm->paddr = tee_shm_pool_alloc(dev,
 			op->Allocator, size, op->page_size);
 
 		if (shm->paddr == 0x0) {
-			dev_err(dev, "[%s] out of shared memory (%d)\n",
+			dev_err(dev, "[%s] out of shared memory (%zu)\n",
 				__func__, size);
 			goto out_shm;
 		}
@@ -426,7 +431,7 @@ struct tee_shm *tee_shm_allocate(struct tee_targetop *op,
 		} else {
 			shm->paddr = tee_shm_iscontinuous(dev, vaddr, size);
 			if (shm->paddr == 0x0) {
-				dev_err(dev, "[%s] SHM not contiguous (0x%p + %d)\n",
+				dev_err(dev, "[%s] SHM not contiguous (0x%p + %zu)\n",
 					__func__, vaddr, size);
 				goto out_shm;
 			}
@@ -440,12 +445,12 @@ struct tee_shm *tee_shm_allocate(struct tee_targetop *op,
 	if (list->refcounter == 1)
 		if (op->register_shm(shm->paddr, size, &list->handle)
 				!= TEEC_SUCCESS) {
-			dev_err(dev, "[%s] Cannot register [0x%p] size [%d]\n",
+			dev_err(dev, "[%s] Cannot register [0x%p] size [%zu]\n",
 				__func__, (void *)shm->paddr, size);
 			goto out_mem;
 		}
 
-	dev_dbg(dev, "< %p + %d\n", (void *)shm->paddr, size);
+	dev_dbg(dev, "< %p + %zd\n", (void *)shm->paddr, size);
 	return shm;
 
 out_mem:
@@ -465,7 +470,7 @@ void tee_shm_unallocate(struct tee_shm *shm)
 	struct device *dev = shm->op->miscdev->this_device;
 	struct mem_part *part;
 	void *handle;
-	uint32_t size;
+	size_t size;
 	struct tee_driver *tee = NULL;
 	unsigned int refcounter =
 		removePhysicalAddr(dev, shm->paddr, &part, &handle);

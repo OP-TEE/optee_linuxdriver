@@ -32,7 +32,7 @@ struct tee_session *tee_create_session(const char *devname, bool userApi);
 void tee_delete_session(struct tee_session *ts);
 
 struct tee_shm *tee_shm_allocate(struct tee_targetop *op,
-				 void *vaddr, int size, uint32_t flags);
+				 void *vaddr, size_t size, uint32_t flags);
 void tee_shm_unallocate(struct tee_shm *shm);
 
 TEEC_Result allocate_uuid(struct tee_session *ts);

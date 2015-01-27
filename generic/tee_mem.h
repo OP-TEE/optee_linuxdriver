@@ -42,7 +42,7 @@ unsigned long tee_shm_pool_alloc(struct device *dev,
 
 
 void tee_shm_pool_free(struct device *dev, struct shm_pool *pool,
-		unsigned long paddr, uint32_t *size);
+		unsigned long paddr, size_t *size);
 
 
 bool tee_shm_pool_incref(struct device *dev, struct shm_pool *pool,

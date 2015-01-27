@@ -253,7 +253,7 @@ void tee_shm_pool_destroy(struct device *dev, struct shm_pool *pool)
 	dev_dbg(dev, "> poolH(0x%p)\n", (void *)pool);
 
 #if defined(_DUMP_INFO_ALLOCATOR) && (_DUMP_INFO_ALLOCATOR > 0)
-	tee_shm_pool_dump(dev, allocator, true);
+	tee_shm_pool_dump(dev, pool, true);
 #endif
 
 	tee_shm_pool_reset(dev, pool);
@@ -543,7 +543,7 @@ failed_out:
  *
  */
 void tee_shm_pool_free(struct device *dev, struct shm_pool *pool,
-		unsigned long paddr, uint32_t *size)
+		unsigned long paddr, size_t *size)
 {
 	struct mem_chunk *chunk;
 	struct mem_chunk *tmp;
