@@ -1,10 +1,12 @@
 CFG_TEE_DRV_DEBUGFS?=0
+CONFIG_TEE_TRACE_PERFORMANCE?=n
 
 ccflags-y+=-Werror
 ccflags-y+=-I$(M)/include/linux -iquote$(M)/generic
 ccflags-y+=-I$(src)/include
 
 ccflags-y+=-DCFG_TEE_DRV_DEBUGFS=${CFG_TEE_DRV_DEBUGFS}
+ccflags-$(CONFIG_TEE_TRACE_PERFORMANCE)+=-DCFG_TEE_TRACE_PERFORMANCE
 
 obj-m += optee.o
 
