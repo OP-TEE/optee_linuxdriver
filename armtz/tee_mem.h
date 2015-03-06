@@ -1,11 +1,15 @@
 /*
-* Copyright (C) STMicroelectronics 2014. All rights reserved.
-*
-* This code is STMicroelectronics proprietary and confidential.
-* Any use of the code for whatever purpose is subject to
-* specific written permission of STMicroelectronics SA.
-*/
-
+ * Copyright (c) 2014, STMicroelectronics International N.V.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License Version 2 as
+ * published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU General Public License for more details.
+ */
 #ifndef TEE_MEM_H
 #define TEE_MEM_H
 
