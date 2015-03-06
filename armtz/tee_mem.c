@@ -318,6 +318,7 @@ void *tee_shm_pool_p2v(struct device *dev, struct shm_pool *pool,
 	} else {
 		unsigned long offset = paddr - pool->paddr;
 		void *p = (void *)((unsigned long)pool->vaddr + offset);
+
 		mutex_unlock(&pool->lock);
 		return p;
 	}
@@ -351,6 +352,7 @@ unsigned long tee_shm_pool_v2p(struct device *dev, struct shm_pool *pool,
 	} else {
 		unsigned long offset = vaddr - pool->vaddr;
 		unsigned long p = pool->paddr + offset;
+
 		mutex_unlock(&pool->lock);
 		return p;
 	}

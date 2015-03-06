@@ -257,6 +257,26 @@ static void handle_rpc_func_cmd(struct tee_tz *ptee, u32 parg32)
 	}
 }
 
+static struct tee_shm *handle_rpc_alloc(struct tee_tz *ptee, size_t size)
+{
+	struct tee_rpc_alloc rpc_alloc;
+
+	rpc_alloc.size = size;
+	tee_supp_cmd(ptee->tee, TEE_RPC_ICMD_ALLOCATE,
+		     &rpc_alloc, sizeof(rpc_alloc));
+	return rpc_alloc.shm;
+}
+
+static void handle_rpc_free(struct tee_tz *ptee, struct tee_shm *shm)
+{
+	struct tee_rpc_free rpc_free;
+
+	if (!shm)
+		return;
+	rpc_free.shm = shm;
+	tee_supp_cmd(ptee->tee, TEE_RPC_ICMD_FREE, &rpc_free, sizeof(rpc_free));
+}
+
 static u32 handle_rpc(struct tee_tz *ptee, struct smc_param *param)
 {
 	struct tee_shm *shm;
@@ -278,15 +298,14 @@ static u32 handle_rpc(struct tee_tz *ptee, struct smc_param *param)
 		/* Can't support payload shared memory with this interface */
 		break;
 	case TEESMC_ST_RPC_FUNC_ALLOC_PAYLOAD:
-		shm = tee_shm_alloc_from_rpc(ptee->tee, param->a1,
-					TEE_SHM_TEMP | TEE_SHM_FROM_RPC);
-		if (!shm) {
+		shm = handle_rpc_alloc(ptee, param->a1);
+		if (IS_ERR_OR_NULL(shm)) {
 			param->a1 = 0;
 			break;
 		}
 		cookie = handle_get(&shm_handle_db, shm);
 		if (cookie < 0) {
-			tee_shm_free_from_rpc(shm);
+			handle_rpc_free(ptee, shm);
 			param->a1 = 0;
 			break;
 		}
@@ -294,11 +313,8 @@ static u32 handle_rpc(struct tee_tz *ptee, struct smc_param *param)
 		param->a2 = cookie;
 		break;
 	case TEESMC_ST_RPC_FUNC_FREE_PAYLOAD:
-		if (true || param->a1) {
-			shm = handle_put(&shm_handle_db, param->a1);
-			if (shm)
-				tee_shm_free_from_rpc(shm);
-		}
+		shm = handle_put(&shm_handle_db, param->a1);
+		handle_rpc_free(ptee, shm);
 		break;
 	case TEESMC_RPC_FUNC_IRQ:
 		break;
@@ -1164,8 +1180,6 @@ static void tz_tee_deinit(struct platform_device *pdev)
 
 	dev_dbg(tee->dev, "%s: dev=%s, Secure armv7 started=%d\n", __func__,
 		 tee->name, ptee->started);
-
-	return;
 }
 
 static int tz_tee_probe(struct platform_device *pdev)

@@ -121,9 +121,17 @@
  *                  application to the Trusted Application.
  * TEEC_MEM_OUTPUT  The Shared Memory can carry data from the Trusted
  *                  Application to the client application.
+ * TEEC_MEM_DMABUF  The Shared Memory is allocated with the dma buf api and
+ *                  not necessarly user mapped.
+ *                  Handle of the memory pass to drivers is the implementation
+ *                  fd field instead of the buffer field.
+ * TEEC_MEM_KAPI    Shared memory is required from another linux module.
+ *                  Dma buf file descriptor is not created.
  */
 #define TEEC_MEM_INPUT   0x00000001
 #define TEEC_MEM_OUTPUT  0x00000002
+#define TEEC_MEM_DMABUF  0x00010000
+#define TEEC_MEM_KAPI    0x00020000
 
 /**
  * Return values. Type is TEEC_Result
@@ -236,10 +244,17 @@ typedef uint32_t TEEC_Result;
 /**
  * struct TEEC_Context - Represents a connection between a client application
  * and a TEE.
+ *
+ * Context identifier can be a handle (when opened from user land)
+ * or a structure pointer (when opened from kernel land).
+ * Identifier is defined as an union to match type sizes on all architectures.
  */
 typedef struct {
 	char devname[256];
-	int fd;
+	union {
+		struct tee_context *ctx;
+		int fd;
+	};
 } TEEC_Context;
 
 /**
@@ -274,7 +289,10 @@ typedef struct {
 	void *buffer;
 	size_t size;
 	uint32_t flags;
-	/* Implementation-Defined, must match what the kernel driver have */
+	/*
+	 * identifier can store a handle (int) or a structure pointer (void *).
+	 * define this union to match case where sizeof(int)!=sizeof(void *).
+	 */
 	union {
 		int fd;
 		void *ptr;

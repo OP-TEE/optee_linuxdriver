@@ -21,6 +21,7 @@
 #include <linux/miscdevice.h>
 #include <linux/types.h>
 #include <linux/atomic.h>
+#include <linux/scatterlist.h>
 
 #include <linux/types.h>
 
@@ -114,6 +115,12 @@ struct tee_session {
 	void *priv;
 };
 
+struct tee_shm_dma_buf {
+	struct dma_buf_attachment *attach;
+	struct sg_table *sgt;
+	bool tee_allocated;
+};
+
 /**
  * struct tee_shm - internal structure to store a shm object.
  *
@@ -134,19 +141,19 @@ struct tee_shm {
 	struct device *dev;
 	size_t size_req;
 	size_t size_alloc;
+	uint32_t flags;
 	void *kaddr;
 	dma_addr_t paddr;
-	uint32_t flags;
-	struct tee_shm *parent;
+	struct sg_table sgt;
+	struct tee_shm_dma_buf *sdb;
 };
 
 #define TEE_SHM_MAPPED			0x01000000
 #define TEE_SHM_TEMP			0x02000000
 #define TEE_SHM_FROM_RPC		0x04000000
 #define TEE_SHM_REGISTERED		0x08000000
-#define TEE_SHM_PARENT			0x10000000
+#define TEE_SHM_MEMREF			0x10000000
 #define TEE_SHM_CACHED			0x20000000
-#define TEE_SHM_FROM_KAPI		0x40000000
 
 #define TEE_SHM_DRV_PRIV_MASK		0xFF000000
 
@@ -169,8 +176,7 @@ struct tee_cmd {
 	struct tee_data param;
 };
 
-struct tee_shm *tee_shm_alloc_from_rpc(struct tee *tee, size_t size,
-				       uint32_t flags);
+struct tee_shm *tee_shm_alloc_from_rpc(struct tee *tee, size_t size);
 void tee_shm_free_from_rpc(struct tee_shm *);
 
 int tee_core_add(struct tee *tee);
@@ -182,16 +188,17 @@ struct tee *tee_core_alloc(struct device *dev, char *name, int id,
 struct tee_ops {
 	struct module *owner;
 	const char *type;
-	int (*start) (struct tee *tee);
-	int (*stop) (struct tee *tee);
-	int (*open) (struct tee_session *sess, struct tee_cmd *cmd);
-	int (*close) (struct tee_session *sess);
-	int (*invoke) (struct tee_session *sess, struct tee_cmd *cmd);
-	int (*cancel) (struct tee_session *sess, struct tee_cmd *cmd);
-	struct tee_shm *(*alloc) (struct tee *tee, size_t size,
+
+	int (*start)(struct tee *tee);
+	int (*stop)(struct tee *tee);
+	int (*open)(struct tee_session *sess, struct tee_cmd *cmd);
+	int (*close)(struct tee_session *sess);
+	int (*invoke)(struct tee_session *sess, struct tee_cmd *cmd);
+	int (*cancel)(struct tee_session *sess, struct tee_cmd *cmd);
+	struct tee_shm *(*alloc)(struct tee *tee, size_t size,
 				  uint32_t flags);
-	void (*free) (struct tee_shm *shm);
-	int (*shm_inc_ref) (struct tee_shm *shm);
+	void (*free)(struct tee_shm *shm);
+	int (*shm_inc_ref)(struct tee_shm *shm);
 };
 
 #endif /* __TEE_CORE_DRV_H__ */

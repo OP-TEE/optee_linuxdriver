@@ -53,11 +53,8 @@ enum teec_rpc_result tee_supp_cmd(struct tee *tee,
 			alloc = (struct tee_rpc_alloc *)data;
 			size = alloc->size;
 			memset(alloc, 0, sizeof(struct tee_rpc_alloc));
-			shmint =
-			    tee_shm_alloc_from_rpc(tee, size,
-						   TEE_SHM_TEMP |
-						   TEE_SHM_FROM_RPC);
-			if (shmint == NULL)
+			shmint = tee_shm_alloc_from_rpc(tee, size);
+			if (IS_ERR_OR_NULL(shmint))
 				break;
 
 			alloc->size = size;
@@ -72,7 +69,7 @@ enum teec_rpc_result tee_supp_cmd(struct tee *tee,
 			struct tee_rpc_free *free;
 
 			free = (struct tee_rpc_free *)data;
-			tee_shm_free(free->shm);
+			tee_shm_free_from_rpc(free->shm);
 			res = TEEC_RPC_OK;
 			break;
 		}
