@@ -72,17 +72,17 @@ TEEC_Result TEEC_InitializeContext(const char *name, TEEC_Context *context)
 }
 EXPORT_SYMBOL(TEEC_InitializeContext);
 
-TEEC_Result TEEC_FinalizeContext(TEEC_Context *context)
+void TEEC_FinalizeContext(TEEC_Context *context)
 {
 	if (!context || !context->fd) {
 		pr_err("%s - can't release context %p:[%s]\n", __func__,
 		       context, (context
 				 && context->devname) ? context->devname : "");
-		return TEEC_ERROR_BAD_PARAMETERS;
+		return;
 	}
 	/* TODO fixme will not work on 64-bit platform */
 	tee_context_destroy((struct tee_context *)(uintptr_t)context->fd);
-	return TEEC_SUCCESS;
+	return;
 }
 EXPORT_SYMBOL(TEEC_FinalizeContext);
 
