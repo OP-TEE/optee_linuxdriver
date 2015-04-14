@@ -5,6 +5,7 @@
 * Any use of the code for whatever purpose is subject to
 * specific written permission of STMicroelectronics SA.
 */
+#include <linux/semaphore.h>
 
 #ifndef TEE_SUPP_COMM_H
 #define TEE_SUPP_COMM_H
@@ -37,8 +38,6 @@
 #define TEE_MUTEX_WAIT_WAKEUP	1
 #define TEE_MUTEX_WAIT_DELETE	2
 
-#include <linux/semaphore.h>
-
 /**
  * struct tee_rpc_bf - Contains definition of the tee com buffer
  * @state: Buffer state
@@ -68,19 +67,19 @@ struct tee_rpc_cmd {
 
 struct tee_rpc_invoke {
 	uint32_t cmd;
-	uint32_t res;
-	uint32_t nbr_bf;
+	uint32_t ret;
+	uint32_t num_params;
 	struct tee_rpc_cmd cmds[TEE_RPC_BUFFER_NUMBER];
 };
 
 struct tee_rpc {
-	struct tee_rpc_invoke commToUser;
-	struct tee_rpc_invoke commFromUser;
-	struct semaphore datatouser;
-	struct semaphore datafromuser;
-	struct mutex outsync; /* Out sync mutex */
-	struct mutex insync; /* In sync mutex */
-	struct mutex reqsync; /* Request sync mutex */
+	struct tee_rpc_invoke comm_to_user;
+	struct tee_rpc_invoke comm_from_user;
+	struct semaphore data_to_user;
+	struct semaphore data_from_user;
+	struct mutex out_sync; /* Out sync mutex */
+	struct mutex in_sync; /* In sync mutex */
+	struct mutex req_sync; /* Request sync mutex */
 	atomic_t  used;
 };
 

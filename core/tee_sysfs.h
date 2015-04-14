@@ -1,4 +1,3 @@
-
 #ifndef __TEE_SYSFS_H__
 #define __TEE_SYSFS_H__
 

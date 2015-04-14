@@ -11,11 +11,10 @@
  * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License along
- * with this program; if not, write to the Free Software Foundation, Inc.,
- * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
+ * with this program.  If not, see <http://www.gnu.org/licenses/>
  */
 #include <linux/slab.h>
-#include "tee_mutex_wait.h"
+#include <optee/tee_mutex_wait.h>
 
 struct tee_mutex_wait {
 	struct list_head link;
@@ -45,10 +44,8 @@ static struct tee_mutex_wait *tee_mutex_wait_get(struct device *dev,
 			goto out;
 
 	w = kmalloc(sizeof(struct tee_mutex_wait), GFP_KERNEL);
-	if (!w) {
-		dev_err(dev, "kmalloc <struct tee_mutex_wait> failed\n");
+	if (!w)
 		goto out;
-	}
 
 	init_completion(&w->comp);
 	mutex_init(&w->mu);

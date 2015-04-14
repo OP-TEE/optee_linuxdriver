@@ -11,14 +11,15 @@
 # GNU General Public License for more details.
 #
 # You should have received a copy of the GNU General Public License along
-# with this program; if not, write to the Free Software Foundation, Inc.,
-# 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
-#
+# with this program.  If not, see <http://www.gnu.org/licenses/>
 
 # Trursted Execution Environment Configuration
-config TEE_SUPPORT
-	bool "Trusted Execution Environment Support"
-	default y
+config  OPTEE
+	tristate "OPTEE driver support"
+        depends on ARM64 || ARM
+        select DMA_SHARED_BUFFER
+	default n
 	---help---
-	  This implements the Trusted Execution Environment (TEE) Client
-	  API Specification from GlobalPlatform Device Technology.
+	  This option implements the kernel driver for OP-TEE. If you want to
+	  make OP-TEE working in your hardware, please say 'Yes' to configure.
+	  Choose 'M' to compile this driver as a module and say 'N' if unsure.

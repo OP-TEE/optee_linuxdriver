@@ -58,10 +58,11 @@ struct mem_chunk {
  * \brief Main structure to describe a shared memory pool
  *
  * \param size    Total size in bytes of the associated memory region
+ * \param used    Total size in bytes of the used memory
  * \param vaddr   Logical base address
  * \param paddr   Physical base address
- * \param used    Total size in bytes of the used memory
- * \param mchunks     List head for handle the elementary memory blocks
+ * \param cached  Indicate if the pool is cacheable or not
+ * \param mchunks List head for handle the elementary memory blocks
  *
  * Shared memory pool structure definition
  */
@@ -81,7 +82,7 @@ struct shm_pool {
  * \brief Dumps the information of the shared memory pool
  *
  * \param pool           Pointer on the pool
- * \param detailforced   Flag to force the log for the detailed informations
+ * \param detailforced   Flag to force the log for the detailed information
  *
  * Dump/log the meta data of the shared memory pool on the standard output.
  *
@@ -119,12 +120,12 @@ void tee_shm_pool_dump(struct device *dev, struct shm_pool *pool, bool forced)
 	}
 }
 
-bool tee_shm_pool_is_cached(struct shm_pool *pool)
+inline bool tee_shm_pool_is_cached(struct shm_pool *pool)
 {
 	return pool->cached;
 }
 
-void tee_shm_pool_set_cached(struct shm_pool *pool)
+inline void tee_shm_pool_set_cached(struct shm_pool *pool)
 {
 	pool->cached = true;
 }
@@ -157,11 +158,10 @@ struct shm_pool *tee_shm_pool_create(struct device *dev, size_t shm_size,
 		shm_vaddr, (void *)shm_paddr, shm_size / 1024);
 
 	/* Alloc and initialize the shm_pool structure */
-	pool = _KMALLOC(sizeof(struct shm_pool), GFP_KERNEL);
-	if (!pool) {
-		dev_err(dev, "kmalloc <struct shm_pool> failed\n");
+	pool = devm_kzalloc(dev, sizeof(struct shm_pool), GFP_KERNEL);
+	if (!pool)
 		goto alloc_failed;
-	}
+
 	memset(pool, 0, sizeof(*pool));
 	mutex_init(&pool->lock);
 	mutex_lock(&pool->lock);
@@ -173,11 +173,10 @@ struct shm_pool *tee_shm_pool_create(struct device *dev, size_t shm_size,
 
 	/* Create the initial elementary memory chunk    */
 	/* which handles the whole memory region         */
-	chunk = _KMALLOC(sizeof(struct mem_chunk), GFP_KERNEL);
-	if (!chunk) {
-		dev_err(dev, "kmalloc <struct MemChunk> failed\n");
+	chunk = devm_kzalloc(dev, sizeof(struct mem_chunk), GFP_KERNEL);
+	if (!chunk)
 		goto alloc_failed;
-	}
+
 	memset(chunk, 0, sizeof(*chunk));
 	chunk->paddr = shm_paddr;
 	chunk->size = shm_size;
@@ -188,7 +187,7 @@ struct shm_pool *tee_shm_pool_create(struct device *dev, size_t shm_size,
 #if defined(_DUMP_INFO_ALLOCATOR) && (_DUMP_INFO_ALLOCATOR > 0)
 	tee_shm_pool_dump(dev, pool, true);
 #endif
-	dev_dbg(dev, "< poolH(0x%p) chunkH=0x%p\n",
+	dev_dbg(dev, "< shm pool address(0x%p), memory chunk address(0x%p)\n",
 		(void *)(pool), (void *)chunk);
 
 	mutex_unlock(&pool->lock);
@@ -238,7 +237,7 @@ void tee_shm_pool_destroy(struct device *dev, struct shm_pool *pool)
 	dev_dbg(dev, "> poolH(0x%p)\n", (void *)pool);
 
 #if defined(_DUMP_INFO_ALLOCATOR) && (_DUMP_INFO_ALLOCATOR > 0)
-	tee_shm_pool_dump(dev, pool, true);
+	tee_shm_pool_dump(dev, allocator, true);
 #endif
 
 	tee_shm_pool_reset(dev, pool);
@@ -252,7 +251,7 @@ void tee_shm_pool_destroy(struct device *dev, struct shm_pool *pool)
 }
 
 /**
- * \brief Free all reserved chunk if any, and set pool at it initial state
+ * \brief Free all reserved chunks if any, and set pool at its initial state
  *
  * \param pool  Pointer on the pool
  *
@@ -301,6 +300,9 @@ void tee_shm_pool_reset(struct device *dev, struct shm_pool *pool)
 void *tee_shm_pool_p2v(struct device *dev, struct shm_pool *pool,
 		       unsigned long paddr)
 {
+	unsigned long offset;
+	void *p;
+
 	if (WARN_ON(!dev || !pool))
 		return NULL;
 
@@ -308,15 +310,17 @@ void *tee_shm_pool_p2v(struct device *dev, struct shm_pool *pool,
 	if (!is_valid_paddr(pool, paddr)) {
 		mutex_unlock(&pool->lock);
 		dev_err(dev,
-			"tee_shm_pool_p2v() paddr=0x%p not in the shm pool\n",
+			"tee_shm_pool_p2v() paddr(0x%p) is out of shm area\n",
 			(void *)paddr);
-		return NULL;
+		p = NULL;
 	} else {
-		unsigned long offset = paddr - pool->paddr;
-		void *p = (void *)((unsigned long)pool->vaddr + offset);
+		offset = paddr - pool->paddr;
+		p = (void *)((unsigned long)pool->vaddr + offset);
+
 		mutex_unlock(&pool->lock);
-		return p;
 	}
+
+	return p;
 }
 
 /**
@@ -334,22 +338,27 @@ void *tee_shm_pool_p2v(struct device *dev, struct shm_pool *pool,
 unsigned long tee_shm_pool_v2p(struct device *dev, struct shm_pool *pool,
 			       void *vaddr)
 {
+	unsigned long offset;
+	unsigned long p;
+
 	if (WARN_ON(!dev || !pool))
 		return 0UL;
 
 	mutex_lock(&pool->lock);
 	if (!is_valid_vaddr(pool, vaddr)) {
 		dev_err(dev,
-			"tee_shm_pool_v2p() vaddr=0x%p not in shm pool\n",
+			"tee_shm_pool_p2v() paddr(0x%p) is out of shm area\n",
 			(void *)vaddr);
 		mutex_unlock(&pool->lock);
-		return 0UL;
+		p = 0UL;
 	} else {
-		unsigned long offset = vaddr - pool->vaddr;
-		unsigned long p = pool->paddr + offset;
+		offset = vaddr - pool->vaddr;
+		p = pool->paddr + offset;
+
 		mutex_unlock(&pool->lock);
-		return p;
 	}
+
+	return p;
 }
 
 /**
@@ -368,12 +377,12 @@ unsigned long tee_shm_pool_alloc(struct device *dev,
 				 struct shm_pool *pool,
 				 size_t size, size_t alignment)
 {
-	struct mem_chunk *chunk;
+	struct mem_chunk *chunk = NULL;
 	struct mem_chunk *betterchunk = NULL;
 	struct mem_chunk *prev_chunk = NULL;
 	struct mem_chunk *next_chunk = NULL;
-	unsigned long begAddr;
-	unsigned long endAddr;
+	unsigned long beg_addr;
+	unsigned long end_addr;
 
 	if (WARN_ON(!dev || !pool))
 		return 0UL;
@@ -389,6 +398,7 @@ unsigned long tee_shm_pool_alloc(struct device *dev,
 	if (ALIGN(size, 0x20) < size)
 		goto failed_out;
 
+	/* Avoid invalid alignment value */
 	if (alignment == 0)
 		alignment = 1;
 
@@ -408,11 +418,11 @@ unsigned long tee_shm_pool_alloc(struct device *dev,
 	 */
 	list_for_each_entry(chunk, &pool->mchunks, node) {
 		if (chunk->counter == 0) {	/* Free chunk */
-			begAddr = ALIGN(chunk->paddr, alignment);
-			endAddr = begAddr + size;
+			beg_addr = ALIGN(chunk->paddr, alignment);
+			end_addr = beg_addr + size;
 
-			if (begAddr >= chunk->paddr
-			    && endAddr <= (chunk->paddr + chunk->size)
+			if (beg_addr >= chunk->paddr
+			    && end_addr <= (chunk->paddr + chunk->size)
 			    && (betterchunk == NULL
 				/* Always split smaller block */
 				|| chunk->size < betterchunk->size))
@@ -424,23 +434,25 @@ unsigned long tee_shm_pool_alloc(struct device *dev,
 	 * Update the linked list
 	 */
 	if (betterchunk != NULL) {
-		prev_chunk = _KMALLOC(sizeof(struct mem_chunk), GFP_KERNEL);
-		next_chunk = _KMALLOC(sizeof(struct mem_chunk), GFP_KERNEL);
+		prev_chunk = devm_kzalloc(dev, sizeof(struct mem_chunk),
+					  GFP_KERNEL);
+		next_chunk = devm_kzalloc(dev, sizeof(struct mem_chunk),
+					  GFP_KERNEL);
 
 		if ((!prev_chunk) || (!next_chunk))
 			goto failed_out_unlock;
 
-		begAddr = ALIGN(betterchunk->paddr, alignment);
-		endAddr = begAddr + size;
+		beg_addr = ALIGN(betterchunk->paddr, alignment);
+		end_addr = beg_addr + size;
 
-		if (betterchunk->paddr < begAddr) {
+		if (betterchunk->paddr < beg_addr) {
 			/* memory between begin of chunk and begin
 			 * of created memory => create a free chunk */
 			prev_chunk->counter = 0;
 			prev_chunk->paddr = betterchunk->paddr;
-			prev_chunk->size = begAddr - betterchunk->paddr;
+			prev_chunk->size = beg_addr - betterchunk->paddr;
 
-			betterchunk->paddr = begAddr;
+			betterchunk->paddr = beg_addr;
 			betterchunk->size -= prev_chunk->size;
 
 			dev_dbg(dev,
@@ -455,11 +467,11 @@ unsigned long tee_shm_pool_alloc(struct device *dev,
 			_KFREE(prev_chunk);
 		}
 
-		if (betterchunk->paddr + betterchunk->size > endAddr) {
+		if (betterchunk->paddr + betterchunk->size > end_addr) {
 			/* memory between end of chunk and end of
 			 * created memory => create a free chunk */
 			next_chunk->counter = 0;
-			next_chunk->paddr = endAddr;
+			next_chunk->paddr = end_addr;
 			next_chunk->size = betterchunk->size - size;
 
 			dev_dbg(dev,
@@ -512,11 +524,51 @@ failed_out:
 	return 0UL;
 }
 
+static void tee_shm_pool_merge_chunk(struct device *dev, struct shm_pool *pool,
+				    struct mem_chunk *chunk)
+{
+	if (--chunk->counter != 0)
+		return;
+
+	pool->used -= chunk->size;
+
+	/* Merge with previous */
+	if (chunk->node.prev != &pool->mchunks) {
+		struct mem_chunk *prev =
+			list_entry(chunk->node.prev,
+					struct mem_chunk, node);
+		if (prev->counter == 0) {
+			dev_dbg(dev,
+				"memory chunk free ok, address=0x%p\n",
+				(void *)chunk);
+			prev->size += chunk->size;
+			list_del(&chunk->node);
+			_KFREE(chunk);
+			chunk = prev;
+		}
+	}
+	/* Merge with next */
+	if (chunk->node.next != &pool->mchunks) {
+		struct mem_chunk *next =
+			list_entry(chunk->node.next,
+					struct mem_chunk, node);
+		if (next->counter == 0) {
+			dev_dbg(dev,
+				"memory chunk free ok, address=0x%p\n",
+				(void *)chunk);
+			chunk->size += next->size;
+			list_del(&next->node);
+			_KFREE(next);
+		}
+	}
+
+}
+
 /**
  * \brief Release a allocated block of memory
  *
  * \param pool          Pointer on the pool
- * \param paddr         Physical @ of the block which must be released
+ * \param paddr         Physical address of the block which must be released
  * \param size          Reference to return the size of the block
  *
  * Free a allocated memory block inside
@@ -524,14 +576,14 @@ failed_out:
  *
  */
 int tee_shm_pool_free(struct device *dev, struct shm_pool *pool,
-		      unsigned long paddr, size_t *size)
+		      unsigned long paddr, uint32_t *size)
 {
 	struct mem_chunk *chunk;
 
 	if (WARN_ON(!dev || !pool))
 		return -EINVAL;
 
-	dev_dbg(dev, "> Try to free ... poolH(0x%p) paddr=0x%p\n",
+	dev_dbg(dev, "> Try to free... pool address(0x%p) paddr=0x%p\n",
 		(void *)pool, (void *)paddr);
 
 #if defined(_DUMP_INFO_ALLOCATOR) && (_DUMP_INFO_ALLOCATOR > 1)
@@ -544,66 +596,36 @@ int tee_shm_pool_free(struct device *dev, struct shm_pool *pool,
 		goto out_failed;
 
 	list_for_each_entry(chunk, &pool->mchunks, node) {
-		if (chunk->paddr == paddr) {
-			if (size != NULL)
-				*size = chunk->size;
+		if (chunk->paddr != paddr)
+			continue;
 
-			if (chunk->counter == 0) {
-				dev_warn(dev,
-					 "< tee_shm_pool_free() WARNING, paddr=0x%p already released\n",
-					 (void *)paddr);
-				return -EINVAL;
-			} else if (--chunk->counter == 0) {
-				dev_dbg(dev, "paddr=%p\n", (void *)paddr);
+		if (size != NULL)
+			*size = chunk->size;
 
-				pool->used -= chunk->size;
+		if (chunk->counter == 0) {
+			dev_warn(dev,
+				"< tee_shm_pool_free() WARNING, paddr=0x%p already released\n",
+				(void *)paddr);
+			return -EINVAL;
+		} else if (chunk->counter == 1) {
+			dev_dbg(dev, "paddr=%p\n", (void *)paddr);
 
-				/* Merge with previous */
-				if (chunk->node.prev != &pool->mchunks) {
-					struct mem_chunk *prev =
-					    list_entry(chunk->node.prev,
-						       struct mem_chunk, node);
-					if (prev->counter == 0) {
-						dev_dbg(dev,
-							"chunkH=0x%p paddr=0x%p free ok\n",
-							(void *)chunk,
-							(void *)paddr);
-						prev->size += chunk->size;
-						list_del(&chunk->node);
-						_KFREE(chunk);
-						chunk = prev;
-					}
-				}
-				/* Merge with next */
-				if (chunk->node.next != &pool->mchunks) {
-					struct mem_chunk *next =
-					    list_entry(chunk->node.next,
-						       struct mem_chunk, node);
-					if (next->counter == 0) {
-						dev_dbg(dev,
-							"chunkH=0x%p paddr=0x%p free ok\n",
-							(void *)chunk,
-							(void *)paddr);
-						chunk->size += next->size;
-						list_del(&next->node);
-						_KFREE(next);
-					}
-				}
-				mutex_unlock(&pool->lock);
+			tee_shm_pool_merge_chunk(dev, pool, chunk);
+
+			mutex_unlock(&pool->lock);
 
 #if defined(_DUMP_INFO_ALLOCATOR) && (_DUMP_INFO_ALLOCATOR > 1)
-				tee_shm_pool_dump(dev, pool, false);
+			tee_shm_pool_dump(dev, pool, false);
 #endif
-				dev_dbg(dev, "< freed\n");
-				return 0;
+			dev_dbg(dev, "< freed\n");
+			return 0;
 
-			} else {
-				mutex_unlock(&pool->lock);
-				dev_dbg(dev,
-					"< paddr=0x%p  (--) refcounter is decremented ret=1\n",
-					(void *)paddr);
-				return 1;
-			}
+		} else {
+			mutex_unlock(&pool->lock);
+			dev_dbg(dev,
+				"< paddr=0x%p  (--) refcounter is decremented ret=1\n",
+				(void *)paddr);
+			return 1;
 		}
 	}
 
@@ -613,7 +635,7 @@ out_failed:
 	tee_shm_pool_dump(dev, pool, false);
 #endif
 	dev_err(dev,
-		"< tee_shm_pool_free() FAILED, pAddr=0x%p not found\n",
+		"< tee_shm_pool_free() FAILED, paddr=0x%p not found\n",
 		(void *)paddr);
 	return -EINVAL;
 }
@@ -644,25 +666,24 @@ bool tee_shm_pool_incref(struct device *dev, struct shm_pool *pool,
 		goto out_failed;
 
 	list_for_each_entry(chunk, &pool->mchunks, node) {
-		if (chunk->paddr == paddr) {
-			dev_dbg(dev,
-				"pAddr=%p (++) refcounter is incremented\n",
-				(void *)paddr);
-			chunk->counter++;
+		if (chunk->paddr != paddr)
+			continue;
+
+		dev_dbg(dev, "paddr=%p (++) refcounter is incremented\n",
+			(void *)paddr);
+		chunk->counter++;
 
 #if defined(_DUMP_INFO_ALLOCATOR) && (_DUMP_INFO_ALLOCATOR > 0)
-			tee_shm_pool_dump(dev, pool, false);
+		tee_shm_pool_dump(dev, pool, false);
 #endif
-			mutex_unlock(&pool->lock);
-			return true;
-		}
+		mutex_unlock(&pool->lock);
+		return true;
 	}
 
 out_failed:
 	mutex_unlock(&pool->lock);
 
-	dev_err(dev,
-		"tee_shm_pool_incref() FAILED, pAddr=%p is not a valid @\n",
+	dev_err(dev, "tee_shm_pool_incref() FAILED, pAddr=%p is not a valid @\n",
 		(void *)paddr);
 
 	return false;

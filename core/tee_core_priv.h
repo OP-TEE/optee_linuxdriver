@@ -1,9 +1,8 @@
-
 #ifndef __TEE_CORE_PRIV_H__
 #define __TEE_CORE_PRIV_H__
 
-#include "linux/tee_core.h"
-#include "linux/tee_ioc.h"
+#include <optee/tee_core.h>
+#include <optee/tee_ioc.h>
 
 /* from tee_core_module.c */
 int tee_get(struct tee *tee);
@@ -26,7 +25,7 @@ struct tee_shm *tee_context_create_tmpref_buffer(struct tee_context *ctx,
 						 const void *buffer, int type);
 struct tee_shm *tee_context_alloc_shm_tmp(struct tee_context *ctx, size_t size,
 					  const void *data, int type);
-int tee_context_copy_from_client(const struct tee_context *ctx, void *dest,
+int tee_context_copy(bool dest, struct tee_context *ctx, void *to,
 				 const void *src, size_t size);
 
 /* from tee_session.c */

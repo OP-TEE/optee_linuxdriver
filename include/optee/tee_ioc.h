@@ -11,7 +11,7 @@
 #endif
 
 /**
- * struct tee_cmd_io - The command sent to an open tee device.
+ * struct tee_cmd_io - The command sent to an open TEE device.
  * @err: Error code (as in Global Platform TEE Client API spec)
  * @origin: Origin for the error code (also from spec).
  * @cmd: The command to be executed in the trusted application.
@@ -19,18 +19,19 @@
  * @data: The trusted application or memory block.
  * @data_size: The size of the trusted application or memory block.
  * @op: The cmd payload operation for the trusted application.
+ * @fd_sess: The fd of TEE session
  *
  * This structure is mainly used in the Linux kernel for communication
  * with the user space.
  */
 struct tee_cmd_io {
-	TEEC_Result err;
+	uint32_t err;
 	uint32_t origin;
 	uint32_t cmd;
-	TEEC_UUID __user *uuid;
+	struct teec_uuid __user *uuid;
 	void __user *data;
 	uint32_t data_size;
-	TEEC_Operation __user *op;
+	struct teec_op_desc __user *op;
 	int fd_sess;
 };
 

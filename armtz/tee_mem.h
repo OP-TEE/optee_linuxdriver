@@ -14,8 +14,8 @@
 
 struct shm_pool;
 
-struct shm_pool *tee_shm_pool_create(struct device *dev, size_t shm_size,
-				     void *shm_vaddr, unsigned long shm_paddr);
+struct shm_pool *tee_shm_pool_create(struct device *dev, size_t size,
+				     void *vaddr, unsigned long paddr);
 
 void tee_shm_pool_destroy(struct device *dev, struct shm_pool *pool);
 
@@ -30,7 +30,7 @@ unsigned long tee_shm_pool_alloc(struct device *dev,
 				 size_t size, size_t alignment);
 
 int tee_shm_pool_free(struct device *dev, struct shm_pool *pool,
-		      unsigned long paddr, size_t *size);
+		      unsigned long paddr, uint32_t *size);
 
 bool tee_shm_pool_incref(struct device *dev, struct shm_pool *pool,
 			 unsigned long paddr);

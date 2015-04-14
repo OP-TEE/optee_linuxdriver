@@ -23,5 +23,3 @@ ENTRY(tee_smc_call)
 	stm	r8, {r0-r7}
 	pop	{r4-r8, pc}
 ENDPROC(tee_smc_call)
-
-

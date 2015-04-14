@@ -2,9 +2,6 @@
  *  tee_driver.c - TEE core kernel module.
  *
  */
-
-/* #define DEBUG */
-
 #include <linux/module.h>
 #include <linux/kernel.h>
 #include <linux/init.h>
@@ -20,16 +17,14 @@
 #include <asm-generic/ioctl.h>
 #include <linux/sched.h>
 
-#include "linux/tee_core.h"
-#include "linux/tee_ioc.h"
+#include <optee/tee_core.h>
+#include <optee/tee_ioc.h>
+#include <optee/tee_shm.h>
+#include <optee/tee_supp_com.h>
+
 
 #include "tee_core_priv.h"
-
 #include "tee_sysfs.h"
-#include "tee_debugfs.h"
-#include "tee_shm.h"
-#include "tee_supp_com.h"
-
 #define _TEE_CORE_FW_VER "1:0.1"
 
 static char *_tee_supp_app_name = "tee-supplicant";
@@ -41,7 +36,7 @@ static int device_match(struct device *device, const void *devname)
 {
 	struct tee *tee = dev_get_drvdata(device);
 	int ret = strncmp(devname, tee->name, sizeof(tee->name));
-	BUG_ON(!tee);
+
 	if (ret == 0)
 		return 1;
 	else
@@ -49,12 +44,13 @@ static int device_match(struct device *device, const void *devname)
 }
 
 /*
- * For the kernel api.
+ * For the kernel API.
  * Get a reference on a device tee from the device needed
  */
 struct tee *tee_get_tee(const char *devname)
 {
 	struct device *device;
+
 	if (!devname)
 		return NULL;
 	device = class_find_device(misc_class, NULL, devname, device_match);
@@ -94,7 +90,7 @@ int tee_get(struct tee *tee)
 
 	if (atomic_inc_return(&tee->refcount) == 1) {
 		BUG_ON(!try_module_get(tee->ops->owner));
-		dev_dbg(_DEV(tee), "%s: refcount=1 call %s::start()...\n",
+		tee_dbg(tee, "%s: refcount=1 call %s::start()...\n",
 			__func__, tee->name);
 		get_device(tee->dev);
 		if (tee->ops->start)
@@ -103,12 +99,13 @@ int tee_get(struct tee *tee)
 	if (ret) {
 		put_device(tee->dev);
 		module_put(tee->ops->owner);
-		dev_err(_DEV(tee), "%s: %s::start() failed, err=%d\n",
+		tee_err(tee, "%s: %s::start() failed, err=%d\n",
 			__func__, tee->name, ret);
 		atomic_dec(&tee->refcount);
 	} else {
 		int count = (int)atomic_read(&tee->refcount);
-		dev_dbg(_DEV(tee), "%s: refcount=%d\n", __func__, count);
+
+		tee_dbg(tee, "%s: refcount=%d\n", __func__, count);
 		if (count > tee->max_refcount)
 			tee->max_refcount = count;
 	}
@@ -130,7 +127,7 @@ int tee_put(struct tee *tee)
 	BUG_ON(!tee);
 
 	if (atomic_dec_and_test(&tee->refcount)) {
-		dev_dbg(_DEV(tee), "%s: refcount=0 call %s::stop()...\n",
+		tee_dbg(tee, "%s: refcount=0 call %s::stop()...\n",
 			__func__, tee->name);
 		if (tee->ops->stop)
 			ret = tee->ops->stop(tee);
@@ -138,19 +135,20 @@ int tee_put(struct tee *tee)
 		put_device(tee->dev);
 	}
 	if (ret) {
-		dev_err(_DEV(tee), "%s: %s::stop() has failed, ret=%d\n",
+		tee_err(tee, "%s: %s::stop() has failed, ret=%d\n",
 			__func__, tee->name, ret);
 	}
 
 	count = (int)atomic_read(&tee->refcount);
-	dev_dbg(_DEV(tee), "%s: refcount=%d\n", __func__, count);
+	tee_dbg(tee, "%s: refcount=%d\n", __func__, count);
 	return ret;
 }
 
 static int tee_supp_open(struct tee *tee)
 {
 	int ret = 0;
-	dev_dbg(_DEV(tee), "%s: appclient=\"%s\" pid=%d\n", __func__,
+
+	tee_dbg(tee, "%s: appclient=\"%s\" pid=%d\n", __func__,
 		current->comm, current->pid);
 
 	BUG_ON(!tee->rpc);
@@ -170,7 +168,7 @@ static int tee_supp_open(struct tee *tee)
 
 static void tee_supp_release(struct tee *tee)
 {
-	dev_dbg(_DEV(tee), "%s: appclient=\"%s\" pid=%d\n", __func__,
+	tee_dbg(tee, "%s: appclient=\"%s\" pid=%d\n", __func__,
 		current->comm, current->pid);
 
 	BUG_ON(!tee->rpc);
@@ -192,7 +190,7 @@ static int tee_ctx_open(struct inode *inode, struct file *filp)
 	BUG_ON(!tee);
 	BUG_ON(tee->miscdev.minor != iminor(inode));
 
-	dev_dbg(_DEV(tee), "%s: > name=\"%s\"\n", __func__, tee->name);
+	tee_dbg(tee, "%s: > name=\"%s\"\n", __func__, tee->name);
 
 	ret = tee_supp_open(tee);
 	if (ret)
@@ -205,7 +203,8 @@ static int tee_ctx_open(struct inode *inode, struct file *filp)
 	ctx->usr_client = 1;
 	filp->private_data = ctx;
 
-	dev_dbg(_DEV(tee), "%s: < ctx=%p is created\n", __func__, (void *)ctx);
+	tee_dbg(tee, "%s: < ctx=%p is created\n",
+		__func__, (void *)ctx);
 
 	return 0;
 }
@@ -222,12 +221,12 @@ static int tee_ctx_release(struct inode *inode, struct file *filp)
 	tee = ctx->tee;
 	BUG_ON(tee->miscdev.minor != iminor(inode));
 
-	dev_dbg(_DEV(tee), "%s: > ctx=%p\n", __func__, ctx);
+	tee_dbg(tee, "%s: > ctx=%p\n", __func__, ctx);
 
 	tee_context_destroy(ctx);
 	tee_supp_release(tee);
 
-	dev_dbg(_DEV(tee), "%s: < ctx=%p is destroyed\n", __func__, ctx);
+	tee_dbg(tee, "%s: < ctx=%p is destroyed\n", __func__, ctx);
 	return 0;
 }
 
@@ -241,15 +240,15 @@ static int tee_do_create_session(struct tee_context *ctx,
 	tee = ctx->tee;
 	BUG_ON(!ctx->usr_client);
 
-	dev_dbg(_DEV(tee), "%s: >\n", __func__);
+	tee_dbg(tee, "%s: >\n", __func__);
 
 	if (copy_from_user(&k_cmd, (void *)u_cmd, sizeof(struct tee_cmd_io))) {
-		dev_err(_DEV(tee), "%s: copy_from_user failed\n", __func__);
+		tee_err(tee, "%s: copy_from_user failed\n", __func__);
 		goto exit;
 	}
 
 	if (k_cmd.fd_sess > 0) {
-		dev_err(_DEV(tee), "%s: invalid fd_sess %d\n", __func__,
+		tee_err(tee, "%s: invalid fd_sess %d\n", __func__,
 			k_cmd.fd_sess);
 		goto exit;
 	}
@@ -257,7 +256,7 @@ static int tee_do_create_session(struct tee_context *ctx,
 	if ((k_cmd.op == NULL) || (k_cmd.uuid == NULL) ||
 	    ((k_cmd.data != NULL) && (k_cmd.data_size == 0)) ||
 	    ((k_cmd.data == NULL) && (k_cmd.data_size != 0))) {
-		dev_err(_DEV(tee),
+		tee_err(tee,
 			"%s: op or/and data parameters are not valid\n",
 			__func__);
 		goto exit;
@@ -272,7 +271,7 @@ static int tee_do_create_session(struct tee_context *ctx,
 	put_user(k_cmd.fd_sess, &u_cmd->fd_sess);
 
 exit:
-	dev_dbg(_DEV(tee), "%s: < ret=%d, sessfd=%d\n", __func__, ret,
+	tee_dbg(tee, "%s: < ret=%d, sessfd=%d\n", __func__, ret,
 		k_cmd.fd_sess);
 	return ret;
 }
@@ -283,19 +282,19 @@ static int tee_do_shm_alloc(struct tee_context *ctx,
 	int ret = -EINVAL;
 	struct tee_shm_io k_shm;
 	struct tee *tee = ctx->tee;
+
 	BUG_ON(!ctx->usr_client);
 
-	dev_dbg(_DEV(tee), "%s: >\n", __func__);
+	tee_dbg(tee, "%s: >\n", __func__);
 
 	if (copy_from_user(&k_shm, (void *)u_shm, sizeof(struct tee_shm_io))) {
-		dev_err(_DEV(tee), "%s: copy_from_user failed\n", __func__);
+		tee_err(tee, "%s: copy_from_user failed\n", __func__);
 		goto exit;
 	}
 
 	if ((k_shm.buffer != NULL) || (k_shm.fd_shm != 0) ||
-	    /*(k_shm.flags & ~(tee->shm_flags)) ||*/
 	    ((k_shm.flags & tee->shm_flags) == 0) || (k_shm.registered != 0)) {
-		dev_err(_DEV(tee),
+		tee_err(tee,
 			"%s: shm parameters are not valid %p %d %08x %08x %d\n",
 			__func__, (void *)k_shm.buffer, k_shm.fd_shm,
 			(unsigned int)k_shm.flags, (unsigned int)tee->shm_flags,
@@ -310,7 +309,7 @@ static int tee_do_shm_alloc(struct tee_context *ctx,
 	put_user(k_shm.fd_shm, &u_shm->fd_shm);
 
 exit:
-	dev_dbg(_DEV(tee), "%s: < ret=%d, shmfd=%d\n", __func__, ret,
+	tee_dbg(tee, "%s: < ret=%d, shmfd=%d\n", __func__, ret,
 		k_shm.fd_shm);
 	return ret;
 }
@@ -322,11 +321,11 @@ static int tee_do_get_fd_for_rpc_shm(struct tee_context *ctx,
 	struct tee_shm_io k_shm;
 	struct tee *tee = ctx->tee;
 
-	dev_dbg(_DEV(tee), "%s: >\n", __func__);
+	tee_dbg(tee, "%s: >\n", __func__);
 	BUG_ON(!ctx->usr_client);
 
 	if (copy_from_user(&k_shm, (void *)u_shm, sizeof(struct tee_shm_io))) {
-		dev_err(_DEV(tee), "%s: copy_from_user failed\n", __func__);
+		tee_err(tee, "%s: copy_from_user failed\n", __func__);
 		goto exit;
 	}
 
@@ -334,7 +333,7 @@ static int tee_do_get_fd_for_rpc_shm(struct tee_context *ctx,
 	    || (k_shm.flags & ~(tee->shm_flags))
 	    || ((k_shm.flags & tee->shm_flags) == 0)
 	    || (k_shm.registered != 0)) {
-		dev_err(_DEV(tee), "%s: shm parameters are not valid\n",
+		tee_err(tee, "%s: shm parameters are not valid\n",
 			__func__);
 		goto exit;
 	}
@@ -346,7 +345,7 @@ static int tee_do_get_fd_for_rpc_shm(struct tee_context *ctx,
 	put_user(k_shm.fd_shm, &u_shm->fd_shm);
 
 exit:
-	dev_dbg(_DEV(tee), "%s: < ret=%d, shmfd=%d\n", __func__, ret,
+	tee_dbg(tee, "%s: < ret=%d, shmfd=%d\n", __func__, ret,
 		k_shm.fd_shm);
 	return ret;
 }
@@ -359,7 +358,7 @@ static long tee_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 	BUG_ON(!ctx);
 	BUG_ON(!ctx->tee);
 
-	dev_dbg(_DEV(ctx->tee), "%s: > cmd nr=%d\n", __func__, _IOC_NR(cmd));
+	tee_dbg(ctx->tee, "%s: > cmd nr=%d\n", __func__, _IOC_NR(cmd));
 
 	switch (cmd) {
 	case TEE_OPEN_SESSION_IOC:
@@ -379,7 +378,7 @@ static long tee_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 		break;
 	}
 
-	dev_dbg(_DEV(ctx->tee), "%s: < ret=%d\n", __func__, ret);
+	tee_dbg(ctx->tee, "%s: < ret=%d\n", __func__, ret);
 
 	return ret;
 }
@@ -408,10 +407,8 @@ struct tee *tee_core_alloc(struct device *dev, char *name, int id,
 		return NULL;
 
 	tee = devm_kzalloc(dev, sizeof(struct tee) + len, GFP_KERNEL);
-	if (!tee) {
-		dev_err(dev, "%s: kzalloc failed\n", __func__);
+	if (!tee)
 		return NULL;
-	}
 
 	if (!dev->release)
 		dev->release = tee_plt_device_release;
@@ -445,22 +442,21 @@ EXPORT_SYMBOL(tee_core_alloc);
 
 int tee_core_add(struct tee *tee)
 {
-	int rc = 0;
+	int ret = 0;
 
 	if (!tee)
 		return -EINVAL;
 
-	rc = misc_register(&tee->miscdev);
-	if (rc != 0) {
+	ret = misc_register(&tee->miscdev);
+	if (ret != 0) {
 		pr_err("TEE Core: misc_register() failed name=\"%s\"\n",
 		       tee->name);
-		return rc;
+		return ret;
 	}
 
 	dev_set_drvdata(tee->miscdev.this_device, tee);
 
 	tee_init_sysfs(tee);
-	tee_create_debug_dir(tee);
 
 	/* Register a static reference on the class misc
 	 * to allow finding device by class */
@@ -473,7 +469,7 @@ int tee_core_add(struct tee *tee)
 	pr_info("TEE Core: Register the misc device \"%s\" (id=%d,minor=%d)\n",
 		dev_name(tee->miscdev.this_device), tee->id,
 		tee->miscdev.minor);
-	return rc;
+	return ret;
 }
 EXPORT_SYMBOL(tee_core_add);
 
@@ -486,7 +482,6 @@ int tee_core_del(struct tee *tee)
 		tee_supp_deinit(tee);
 
 		tee_cleanup_sysfs(tee);
-		tee_delete_debug_dir(tee);
 
 		if (tee->miscdev.minor != MISC_DYNAMIC_MINOR) {
 			pr_info("TEE Core: Deregister the misc device \"%s\" (id=%d)\n",
@@ -503,14 +498,11 @@ static int __init tee_core_init(void)
 {
 	pr_info("\nTEE Core Framework initialization (ver %s)\n",
 		_TEE_CORE_FW_VER);
-	tee_init_debugfs();
-
 	return 0;
 }
 
 static void __exit tee_core_exit(void)
 {
-	tee_exit_debugfs();
 	pr_info("TEE Core Framework unregistered\n");
 }
 

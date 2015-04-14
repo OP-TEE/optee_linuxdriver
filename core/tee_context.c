@@ -1,4 +1,3 @@
-
 #include <linux/slab.h>
 #include <linux/device.h>
 #include <linux/types.h>
@@ -7,95 +6,97 @@
 #include <linux/uaccess.h>
 #include <linux/sched.h>
 
-#include "tee_shm.h"
+#include <optee/tee_shm.h>
+
 #include "tee_core_priv.h"
 
+#define TEE_CONTEXT_DUMP_MIN_LEN 80
 
 /**
- * tee_context_dump -	Dump in a buffer the informations (ctx, sess & shm)
- *			associated to a tee.
+ * tee_context_dump -	Dump in a buffer the information (ctx, sess & shm)
+ *			associated to a TEE.
  */
 int tee_context_dump(struct tee *tee, char *buff, size_t len)
 {
-	struct list_head *ptrCtx, *ptrSess, *ptrShm;
+	struct list_head *ptr_ctx, *ptr_sess, *ptr_shm;
 	struct tee_context *ctx;
 	struct tee_session *sess;
 	struct tee_shm *shm;
 	int i = 0;
 	int j = 0;
-
 	int pos = 0;
 
 	BUG_ON(!tee);
 
-	if (len < 80)
+	if (len < TEE_CONTEXT_DUMP_MIN_LEN || list_empty(&tee->list_ctx))
 		return 0;
 
 	mutex_lock(&tee->lock);
-	if (!list_empty(&tee->list_ctx)) {
-		list_for_each(ptrCtx, &tee->list_ctx) {
-			ctx = list_entry(ptrCtx, struct tee_context, entry);
+
+	list_for_each(ptr_ctx, &tee->list_ctx) {
+		ctx = list_entry(ptr_ctx, struct tee_context, entry);
+
+		pos += sprintf(buff + pos,
+				"[%02d] ctx=%p (refcount=%d) (usr=%d)",
+				i, ctx,
+				(int)atomic_read(&ctx->refcount.
+					refcount),
+				ctx->usr_client);
+		pos += sprintf(buff + pos, "name=\"%s\" (tgid=%d)\n",
+				ctx->name,
+				ctx->tgid);
+		if ((len - pos) < TEE_CONTEXT_DUMP_MIN_LEN) {
+			pos = 0;
+			goto out;
+		}
+
+		if (list_empty(&ctx->list_sess))
+			goto out;
+
+		j = 0;
+		list_for_each(ptr_sess, &ctx->list_sess) {
+			sess = list_entry(ptr_sess,
+					struct tee_session,
+					entry);
 
 			pos += sprintf(buff + pos,
-				       "[%02d] ctx=%p (refcount=%d) (usr=%d) "
-				       "name=\"%s\" (tgid=%d)\n",
-				       i, ctx,
-				       (int)atomic_read(&ctx->refcount.
-							refcount),
-				       ctx->usr_client, ctx->name, ctx->tgid);
+					"[%02d.%d] sess=%p sessid=%08x\n",
+					i, j, sess,
+					sess->sessid);
 
-			if ((len - pos) < 80) {
+			if ((len - pos) < TEE_CONTEXT_DUMP_MIN_LEN) {
 				pos = 0;
 				goto out;
 			}
 
-			j = 0;
-			if (!list_empty(&ctx->list_sess)) {
-				list_for_each(ptrSess, &ctx->list_sess) {
-					sess = list_entry(ptrSess,
-							  struct tee_session,
-							  entry);
-
-					pos += sprintf(buff + pos,
-						       " [%02d.%d] sess=%p sessid=%08x\n",
-						       i, j, sess,
-						       sess->sessid);
-
-					if ((len - pos) < 80) {
-						pos = 0;
-						goto out;
-					}
-
-					j++;
-				}
-			}
-
-			j = 0;
-			if (!list_empty(&ctx->list_shm)) {
-				list_for_each(ptrShm, &ctx->list_shm) {
-					shm =
-					    list_entry(ptrShm, struct tee_shm,
-						       entry);
-
-					pos += sprintf(buff + pos,
-						       " [%02d.%d] shm=%p paddr=%pad "
-						       "kaddr=%p s=%zu(%zu)\n",
-						       i, j, shm,
-						       &shm->paddr,
-						       shm->kaddr,
-						       shm->size_req,
-						       shm->size_alloc);
-
-					if ((len - pos) < 80) {
-						pos = 0;
-						goto out;
-					}
-
-					j++;
-				}
-			}
-			i++;
+			j++;
 		}
+
+		if (list_empty(&ctx->list_shm))
+			goto out;
+
+		j = 0;
+		list_for_each(ptr_shm, &ctx->list_shm) {
+			shm = list_entry(ptr_shm, struct tee_shm, entry);
+
+			pos += sprintf(buff + pos,
+					"[%02d.%d] shm=%p paddr=%p kaddr=%p",
+					i, j, shm,
+					&shm->paddr,
+					shm->kaddr);
+			pos += sprintf(buff + pos,
+					" s=%zu(%zu)\n",
+					shm->size_req,
+					shm->size_alloc);
+			if ((len - pos) < TEE_CONTEXT_DUMP_MIN_LEN) {
+				pos = 0;
+				goto out;
+			}
+
+			j++;
+		}
+
+		i++;
 	}
 
 out:
@@ -112,14 +113,12 @@ struct tee_context *tee_context_create(struct tee *tee)
 	int ret;
 	struct tee_context *ctx;
 
-	dev_dbg(_DEV(tee), "%s: >\n", __func__);
+	tee_dbg(tee, "%s: >\n", __func__);
 
-	ctx = devm_kzalloc(_DEV(tee), sizeof(struct tee_context), GFP_KERNEL);
-	if (!ctx) {
-		dev_err(_DEV(tee), "%s: tee_context allocation failed\n",
-			__func__);
+	ctx = devm_kzalloc(TEE_DEV(tee),
+			   sizeof(struct tee_context), GFP_KERNEL);
+	if (!ctx)
 		return ERR_PTR(-ENOMEM);
-	}
 
 	kref_init(&ctx->refcount);
 	INIT_LIST_HEAD(&ctx->list_sess);
@@ -131,7 +130,7 @@ struct tee_context *tee_context_create(struct tee *tee)
 
 	ret = tee_get(tee);
 	if (ret) {
-		devm_kfree(_DEV(tee), ctx);
+		devm_kfree(TEE_DEV(tee), ctx);
 		return ERR_PTR(ret);
 	}
 
@@ -140,15 +139,15 @@ struct tee_context *tee_context_create(struct tee *tee)
 	list_add_tail(&ctx->entry, &tee->list_ctx);
 	mutex_unlock(&tee->lock);
 
-	dev_dbg(_DEV(ctx->tee), "%s: < ctx=%p is created\n", __func__, ctx);
+	tee_dbg(ctx->tee, "%s: < ctx=%p is created\n", __func__, ctx);
 	return ctx;
 }
 
 /**
- * _tee_context_do_release - Final function to release
+ * tee_context_do_release - Final function to release
  *                           and free a context.
  */
-static void _tee_context_do_release(struct kref *kref)
+static void tee_context_do_release(struct kref *kref)
 {
 	struct tee_context *ctx;
 	struct tee *tee;
@@ -159,17 +158,17 @@ static void _tee_context_do_release(struct kref *kref)
 
 	tee = ctx->tee;
 
-	dev_dbg(_DEV(tee), "%s: > ctx=%p\n", __func__, ctx);
+	tee_dbg(tee, "%s: > ctx=%p\n", __func__, ctx);
 
 	mutex_lock(&tee->lock);
 	tee_dec_stats(&tee->stats[TEE_STATS_CONTEXT_IDX]);
 	list_del(&ctx->entry);
 	mutex_unlock(&tee->lock);
 
-	devm_kfree(_DEV(tee), ctx);
+	devm_kfree(TEE_DEV(tee), ctx);
 	tee_put(tee);
 
-	dev_dbg(_DEV(tee), "%s: < ctx=%p is destroyed\n", __func__, ctx);
+	tee_dbg(tee, "%s: < ctx=%p is destroyed\n", __func__, ctx);
 }
 
 /**
@@ -182,13 +181,14 @@ void tee_context_get(struct tee_context *ctx)
 
 	kref_get(&ctx->refcount);
 
-	dev_dbg(_DEV(ctx->tee), "%s: ctx=%p, kref=%d\n", __func__,
+	tee_dbg(ctx->tee, "%s: ctx=%p, kref=%d\n", __func__,
 		ctx, (int)atomic_read(&ctx->refcount.refcount));
 }
 
 static int is_in_list(struct tee *tee, struct list_head *entry)
 {
 	int present = 1;
+
 	mutex_lock(&tee->lock);
 	if ((entry->next == LIST_POISON1) && (entry->prev == LIST_POISON2))
 		present = 0;
@@ -205,15 +205,16 @@ void tee_context_put(struct tee_context *ctx)
 {
 	struct tee_context *_ctx = ctx;
 	struct tee *tee;
+
 	BUG_ON(!ctx || !ctx->tee);
 	tee = ctx->tee;
 
 	if (!is_in_list(tee, &ctx->entry))
 		return;
 
-	kref_put(&ctx->refcount, _tee_context_do_release);
+	kref_put(&ctx->refcount, tee_context_do_release);
 
-	dev_dbg(_DEV(tee), "%s: ctx=%p, kref=%d\n", __func__,
+	tee_dbg(tee, "%s: ctx=%p, kref=%d\n", __func__,
 		_ctx, (int)atomic_read(&ctx->refcount.refcount));
 }
 
@@ -229,22 +230,28 @@ void tee_context_destroy(struct tee_context *ctx)
 
 	tee = ctx->tee;
 
-	dev_dbg(_DEV(tee), "%s: ctx=%p\n", __func__, ctx);
+	tee_dbg(tee, "%s: ctx=%p\n", __func__, ctx);
 
 	tee_context_put(ctx);
 }
 
-int tee_context_copy_from_client(const struct tee_context *ctx,
-				 void *dest, const void *src, size_t size)
+int tee_context_copy(bool from_user, struct tee_context *ctx,
+			void *to, const void *from, size_t size)
 {
-	int res = 0;
-	if (dest && src && (size > 0)) {
-		if (ctx->usr_client)
-			res = copy_from_user(dest, src, size);
-		else
-			memcpy(dest, src, size);
-	}
-	return res;
+	int ret = 0;
+
+	if (size <= 0 || to == NULL || from == NULL)
+		return -EINVAL;
+
+	if (!ctx->usr_client) {
+		memcpy(to, from, size);
+		return 0;
+	} else if (from_user)
+		ret = copy_from_user(to, from, size);
+	else
+		ret = copy_to_user(to, from, size);
+
+	return ret;
 }
 
 struct tee_shm *tee_context_alloc_shm_tmp(struct tee_context *ctx,
@@ -257,20 +264,20 @@ struct tee_shm *tee_context_alloc_shm_tmp(struct tee_context *ctx,
 
 	shm = tee_shm_alloc(ctx, size, TEE_SHM_MAPPED | TEE_SHM_TEMP | type);
 	if (IS_ERR_OR_NULL(shm)) {
-		dev_err(_DEV(ctx->tee), "%s: buffer allocation failed (%ld)\n",
+		tee_err(ctx->tee, "%s: buffer allocation failed (%ld)\n",
 			__func__, PTR_ERR(shm));
 		return shm;
 	}
 
-	if (shm && (type & TEEC_MEM_INPUT)) {
-		if (tee_context_copy_from_client(ctx, shm->kaddr, data, size)) {
-			dev_err(_DEV(ctx->tee),
-				"%s: tee_context_copy_from_client failed\n",
-				__func__);
+	if (type & TEEC_MEM_INPUT) {
+		if (tee_context_copy(true, ctx, shm->kaddr, data, size)) {
+			tee_err(ctx->tee, "%s: tee_context_copy failed\n",
+					__func__);
 			tee_shm_free(shm);
 			shm = NULL;
 		}
 	}
+
 	return shm;
 }
 

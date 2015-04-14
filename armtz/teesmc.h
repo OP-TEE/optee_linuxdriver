@@ -11,8 +11,7 @@
  * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License along
- * with this program; if not, write to the Free Software Foundation, Inc.,
- * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
+ * with this program.  If not, see <http://www.gnu.org/licenses/>
  */
 #ifndef TEESMC_H
 #define TEESMC_H
@@ -101,7 +100,7 @@
  *
  * Secure and normal world communicates pointer via physical address instead of
  * the virtual address with is usually used for pointers. This is because
- * Secure and normal world has completely independant memory mapping. Normal
+ * Secure and normal world has completely independent memory mapping. Normal
  * world can even have a hypervisor which need to translate the guest
  * physical address (AKA IPA in ARM lingo) to a real physical address
  * before passing the structure to secure world.
@@ -184,7 +183,7 @@ struct teesmc64_param {
  * @ta_func: Trusted Application function, specific to the Trusted Application,
  *	     used if cmd == TEESMC_CMD_INVOKE_COMMAND
  * @session: In parameter for all TEESMC_CMD_* except
- *	     TEESMC_CMD_OPEN_SESSION where it's an output paramter instead
+ *	     TEESMC_CMD_OPEN_SESSION where it's an output parameter instead
  * @ret: return value
  * @ret_origin: origin of the return value
  * @num_params: number of parameters supplied to the OS Command
@@ -231,7 +230,7 @@ struct teesmc32_arg {
  * @num_params: Number of parameters embedded in the struct teesmc32_arg
  *
  * Returns the size of the struct teesmc32_arg together with the number
- * of embedded paramters.
+ * of embedded parameters.
  */
 #define TEESMC32_GET_ARG_SIZE(num_params) \
 	(sizeof(struct teesmc32_arg) + \
@@ -284,7 +283,7 @@ struct teesmc64_arg {
  * @num_params: Number of parameters embedded in the struct teesmc64_arg
  *
  * Returns the size of the struct teesmc64_arg together with the number
- * of embedded paramters.
+ * of embedded parameters.
  */
 #define TEESMC64_GET_ARG_SIZE(num_params) \
 	(sizeof(struct teesmc64_arg) + \
@@ -298,7 +297,7 @@ struct teesmc64_arg {
  *				     TEESMC64_CMD_OPEN_SESSION
  * @uuid: UUID of the Trusted Application
  * @clnt_uuid: UUID of client
- * @clnt_login: Login class of client, TEE_LOGIN_* if being Global Platform
+ * @clnt_login: Login class of client, TEE_LOGIN_* if being GlobalPlatform
  *		compliant
  *
  * This struct is passed in the first parameter as an input memref tagged
@@ -365,7 +364,7 @@ struct teesmc_meta_open_session {
  * Function specified by SMC Calling convention
  *
  * Return one of the following UIDs if using API specified in this file
- * without further extentions:
+ * without further extentsions:
  * 65cb6b93-af0c-4617-8ed6-644a8d1140f8 : Only 32 bit calls are supported
  * 65cb6b93-af0c-4617-8ed6-644a8d1140f9 : Both 32 and 64 bit calls are supported
  */
@@ -383,7 +382,7 @@ struct teesmc_meta_open_session {
 /*
  * Function specified by SMC Calling convention
  *
- * Returns 1.0 if using API specified in this file without further extentions.
+ * Returns 1.0 if using API specified in this file without further extentsions.
  */
 #define TEESMC_REVISION_MAJOR	1
 #define TEESMC_REVISION_MINOR	0
@@ -455,7 +454,7 @@ struct teesmc_meta_open_session {
  *					the previously supplied struct
  *					teesmc32_arg.
  * TEESMC_RETURN_EBUSY			Trusted OS busy, try again later.
- * TEESMC_RETURN_EBADADDR		Bad physcial pointer to struct
+ * TEESMC_RETURN_EBADADDR		Bad physical pointer to struct
  *					teesmc32_arg.
  * TEESMC_RETURN_EBADCMD		Bad/unknown cmd in struct teesmc32_arg
  * TEESMC_RETURN_IS_RPC()		Call suspended by RPC call to normal
@@ -658,7 +657,7 @@ struct teesmc_meta_open_session {
 
 /*
  * Do an RPC request. The supplied struct teesmc{32,64}_arg tells which
- * request to do and the paramters for the request. The following fields
+ * request to do and the parameters for the request. The following fields
  * are used (the rest are unused):
  * - cmd		the Request ID
  * - ret		return value of the request, filled in by normal world
@@ -700,5 +699,69 @@ struct teesmc_meta_open_session {
  * Returned in r1 by Trusted OS functions if r0 = TEESMC_RETURN_RPC
  */
 #define TEESMC_RPC_REQUEST_IRQ		0x0
+
+/*
+ * Get Shared Memory Config
+ *
+ * Returns the Secure/Non-secure shared memory config.
+ *
+ * Call register usage:
+ * r0	SMC Function ID, TEESMC32_FASTCALL_GET_SHM_CONFIG
+ * r1-6	Not used
+ * r7	Hypervisor Client ID register
+ *
+ * Have config return register usage:
+ * r0	TEESMC_RETURN_OK
+ * r1	Physical address of start of SHM
+ * r2	Size of of SHM
+ * r3	1 if SHM is cached, 0 if uncached.
+ * r4-7	Preserved
+ *
+ * Not available register usage:
+ * r0	TEESMC_RETURN_NOTAVAIL
+ * r1-3 Not used
+ * r4-7	Preserved
+ */
+#define TEESMC_FUNCID_GET_SHM_CONFIG	0x5700
+#define TEESMC32_FASTCALL_GET_SHM_CONFIG \
+	TEESMC_CALL_VAL(TEESMC_32, TEESMC_FAST_CALL, TEESMC_OWNER_TRUSTED_OS, \
+			TEESMC_FUNCID_GET_SHM_CONFIG)
+
+/*
+ * Configures TZ/NS shared mutex for outer cache maintenance
+ *
+ * Disables, enables usage of outercache mutex.
+ * Returns or sets physical address of outercache mutex.
+ *
+ * Call register usage:
+ * r0	SMC Function ID, TEESMC32_FASTCALL_L2CC_MUTEX
+ * r1	TEESMC_L2CC_MUTEX_GET_ADDR	Get physical address of mutex
+ *	TEESMC_L2CC_MUTEX_SET_ADDR	Set physical address of mutex
+ *	TEESMC_L2CC_MUTEX_ENABLE	Enable usage of mutex
+ *	TEESMC_L2CC_MUTEX_DISABLE	Disable usage of mutex
+ * r2	if r1 == TEESMC_L2CC_MUTEX_SET_ADDR, physical address of mutex
+ * r3-6	Not used
+ * r7	Hypervisor Client ID register
+ *
+ * Have config return register usage:
+ * r0	TEESMC_RETURN_OK
+ * r1	Preserved
+ * r2	if r1 == 0, physical address of L2CC mutex
+ * r3-7	Preserved
+ *
+ * Error return register usage:
+ * r0	TEESMC_RETURN_NOTAVAIL	Physical address not available
+ *	TEESMC_RETURN_EBADADDR		Bad supplied physical address
+ *	TEESMC_RETURN_EBADCMD		Unsupported value in r1
+ * r1-7	Preserved
+ */
+#define TEESMC_L2CC_MUTEX_GET_ADDR	0
+#define TEESMC_L2CC_MUTEX_SET_ADDR	1
+#define TEESMC_L2CC_MUTEX_ENABLE	2
+#define TEESMC_L2CC_MUTEX_DISABLE	3
+#define TEESMC_FUNCID_L2CC_MUTEX	0x5701
+#define TEESMC32_FASTCALL_L2CC_MUTEX \
+	TEESMC_CALL_VAL(TEESMC_32, TEESMC_FAST_CALL, TEESMC_OWNER_TRUSTED_OS, \
+			TEESMC_FUNCID_L2CC_MUTEX)
 
 #endif /* TEESMC_H */

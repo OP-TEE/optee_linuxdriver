@@ -11,8 +11,7 @@
  * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License along
- * with this program; if not, write to the Free Software Foundation, Inc.,
- * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
+ * with this program.  If not, see <http://www.gnu.org/licenses/>
  */
 #include <linux/slab.h>
 #include <linux/string.h>
@@ -20,9 +19,9 @@
 
 /*
  * Define the initial capacity of the database. It should be a low number
- * multiple of 2 since some databases a likely to only use a few handles.
- * Since the algorithm is to doubles up when growing it shouldn't cause a
- * noticable overhead on large databases.
+ * multiple of 2 since some databases are likely to only use a few handles.
+ * Since the algorithm is to double up when growing it shouldn't cause a
+ * noticeable overhead on large databases.
  */
 #define HANDLE_DB_INITIAL_MAX_PTRS	4
 

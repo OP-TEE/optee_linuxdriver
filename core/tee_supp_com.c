@@ -17,12 +17,9 @@
 #include <linux/sched.h>
 #include <linux/device.h>
 
-#include "tee_shm.h"
-#include "tee_core.h"
-#include "tee_supp_com.h"
-
-#define TEE_RPC_BUFFER	0x00000001
-#define TEE_RPC_VALUE	0x00000002
+#include <optee/tee_shm.h>
+#include <optee/tee_core.h>
+#include <optee/tee_supp_com.h>
 
 enum teec_rpc_result tee_supp_cmd(struct tee *tee,
 				  uint32_t id, void *data, size_t datalen)
@@ -31,6 +28,9 @@ enum teec_rpc_result tee_supp_cmd(struct tee *tee,
 	enum teec_rpc_result res = TEEC_RPC_FAIL;
 	size_t size;
 	struct task_struct *task = current;
+	struct tee_rpc_alloc *alloc;
+	struct tee_shm *shmint;
+	struct tee_rpc_free *free;
 
 	dev_dbg(tee->dev, "> tgid:[%d] id:[0x%08x]\n", task->tgid, id);
 
@@ -42,69 +42,54 @@ enum teec_rpc_result tee_supp_cmd(struct tee *tee,
 
 	switch (id) {
 	case TEE_RPC_ICMD_ALLOCATE:
-		{
-			struct tee_rpc_alloc *alloc;
-			struct tee_shm *shmint;
-
-			alloc = (struct tee_rpc_alloc *)data;
-			size = alloc->size;
-			memset(alloc, 0, sizeof(struct tee_rpc_alloc));
-			shmint =
-			    tee_shm_alloc_from_rpc(tee, size,
-						   TEE_SHM_TEMP |
-						   TEE_SHM_FROM_RPC);
-			if (shmint == NULL)
-				break;
-
-			alloc->size = size;
-			alloc->data = (void *)shmint->paddr;
-			alloc->shm = shmint;
-			res = TEEC_RPC_OK;
-
+		alloc = (struct tee_rpc_alloc *)data;
+		size = alloc->size;
+		memset(alloc, 0, sizeof(struct tee_rpc_alloc));
+		shmint =
+			tee_shm_alloc_from_rpc(tee, size,
+					TEE_SHM_TEMP |
+					TEE_SHM_FROM_RPC);
+		if (shmint == NULL)
 			break;
-		}
+
+		alloc->size = size;
+		alloc->data = (void *)shmint->paddr;
+		alloc->shm = shmint;
+		res = TEEC_RPC_OK;
+		break;
+
 	case TEE_RPC_ICMD_FREE:
-		{
-			struct tee_rpc_free *free;
+		free = (struct tee_rpc_free *)data;
+		tee_shm_free(free->shm);
+		res = TEEC_RPC_OK;
+		break;
 
-			free = (struct tee_rpc_free *)data;
-			tee_shm_free(free->shm);
-			res = TEEC_RPC_OK;
-			break;
-		}
 	case TEE_RPC_ICMD_INVOKE:
-		{
-			if (sizeof(rpc->commToUser) < datalen)
-				break;
-
-			mutex_lock(&rpc->outsync);
-
-			memcpy(&rpc->commToUser, data, datalen);
-
-			mutex_unlock(&rpc->outsync);
-
-			dev_dbg(tee->dev,
-				"Supplicant Cmd: %x. Give hand to supplicant\n",
-				rpc->commToUser.cmd);
-
-			up(&rpc->datatouser);
-
-			down(&rpc->datafromuser);
-
-			dev_dbg(tee->dev,
-				"Supplicant Cmd: %x. Give hand to fw\n",
-				rpc->commToUser.cmd);
-
-			mutex_lock(&rpc->insync);
-
-			memcpy(data, &rpc->commFromUser, datalen);
-
-			mutex_unlock(&rpc->insync);
-
-			res = TEEC_RPC_OK;
-
+		if (sizeof(rpc->comm_to_user) < datalen)
 			break;
-		}
+
+		mutex_lock(&rpc->out_sync);
+		memcpy(&rpc->comm_to_user, data, datalen);
+		mutex_unlock(&rpc->out_sync);
+
+		dev_dbg(tee->dev,
+				"Supplicant Cmd: %x. Give hand to supplicant\n",
+				rpc->comm_to_user.cmd);
+
+		up(&rpc->data_to_user);
+		down(&rpc->data_from_user);
+
+		dev_dbg(tee->dev,
+				"Supplicant Cmd: %x. Give hand to fw\n",
+				rpc->comm_to_user.cmd);
+
+		mutex_lock(&rpc->in_sync);
+		memcpy(data, &rpc->comm_from_user, datalen);
+		mutex_unlock(&rpc->in_sync);
+
+		res = TEEC_RPC_OK;
+		break;
+
 	default:
 		/* not supported */
 		break;
@@ -143,27 +128,27 @@ ssize_t tee_supp_read(struct file *filp, char __user *buffer,
 		goto out;
 	}
 
-	if (down_interruptible(&rpc->datatouser))
+	if (down_interruptible(&rpc->data_to_user))
 		return -ERESTARTSYS;
 
 	dev_dbg(tee->dev, "> tgid:[%d]\n", task->tgid);
 
-	mutex_lock(&rpc->outsync);
+	mutex_lock(&rpc->out_sync);
 
 	ret =
-	    sizeof(rpc->commToUser) - sizeof(rpc->commToUser.cmds) +
-	    sizeof(rpc->commToUser.cmds[0]) * rpc->commToUser.nbr_bf;
+	    sizeof(rpc->comm_to_user) - sizeof(rpc->comm_to_user.cmds) +
+	    sizeof(rpc->comm_to_user.cmds[0]) * rpc->comm_to_user.num_params;
 	if (length < ret) {
 		ret = -EINVAL;
 	} else {
-		if (copy_to_user(buffer, &rpc->commToUser, ret)) {
+		if (copy_to_user(buffer, &rpc->comm_to_user, ret)) {
 			dev_err(tee->dev,
 				"[%s] error, copy_to_user failed!\n", __func__);
 			ret = -EINVAL;
 		}
 	}
 
-	mutex_unlock(&rpc->outsync);
+	mutex_unlock(&rpc->out_sync);
 
 out:
 	dev_dbg(tee->dev, "< [%d]\n", ret);
@@ -192,49 +177,49 @@ ssize_t tee_supp_write(struct file *filp, const char __user *buffer,
 		goto out;
 	}
 
-	if (length > 0 && length < sizeof(rpc->commFromUser)) {
+	if (length > 0 && length < sizeof(rpc->comm_from_user)) {
 		uint32_t i;
 
-		mutex_lock(&rpc->insync);
+		mutex_lock(&rpc->in_sync);
 
-		if (copy_from_user(&rpc->commFromUser, buffer, length)) {
+		if (copy_from_user(&rpc->comm_from_user, buffer, length)) {
 			dev_err(tee->dev,
 				"%s: ERROR, tee_session copy_from_user failed\n",
 				__func__);
-			mutex_unlock(&rpc->insync);
+			mutex_unlock(&rpc->in_sync);
 			ret = -EINVAL;
 			goto out;
 		}
 
 		/* Translate virtual address of caller into physical address */
-		for (i = 0; i < rpc->commFromUser.nbr_bf; i++) {
-			if (rpc->commFromUser.cmds[i].type == TEE_RPC_BUFFER
-			    && rpc->commFromUser.cmds[i].buffer) {
+		for (i = 0; i < rpc->comm_from_user.num_params; i++) {
+			if (rpc->comm_from_user.cmds[i].type == TEE_RPC_BUFFER
+			    && rpc->comm_from_user.cmds[i].buffer) {
 				struct vm_area_struct *vma =
 				    find_vma(current->mm,
 					     (unsigned long)rpc->
-					     commFromUser.cmds[i].buffer);
+					     comm_from_user.cmds[i].buffer);
 				if (vma != NULL) {
 					struct tee_shm *shm =
 					    vma->vm_private_data;
 					BUG_ON(!shm);
 					dev_dbg(tee->dev,
 						"%d gid2pa(0x%p => %x)\n", i,
-						rpc->commFromUser.cmds[i].
+						rpc->comm_from_user.cmds[i].
 						buffer,
 						(unsigned int)shm->paddr);
-					rpc->commFromUser.cmds[i].buffer =
+					rpc->comm_from_user.cmds[i].buffer =
 					    (void *)shm->paddr;
 				} else
 					dev_dbg(tee->dev,
 						" gid2pa(0x%p => NULL\n)",
-						rpc->commFromUser.cmds[i].
+						rpc->comm_from_user.cmds[i].
 						buffer);
 			}
 		}
 
-		mutex_unlock(&rpc->insync);
-		up(&rpc->datafromuser);
+		mutex_unlock(&rpc->in_sync);
+		up(&rpc->data_from_user);
 		ret = length;
 	}
 
@@ -253,12 +238,12 @@ int tee_supp_init(struct tee *tee)
 		return -ENOMEM;
 	}
 
-	rpc->datafromuser = (struct semaphore)
-	    __SEMAPHORE_INITIALIZER(rpc->datafromuser, 0);
-	rpc->datatouser = (struct semaphore)
-	    __SEMAPHORE_INITIALIZER(rpc->datatouser, 0);
-	mutex_init(&rpc->outsync);
-	mutex_init(&rpc->insync);
+	rpc->data_from_user = (struct semaphore)
+	    __SEMAPHORE_INITIALIZER(rpc->data_from_user, 0);
+	rpc->data_to_user = (struct semaphore)
+	    __SEMAPHORE_INITIALIZER(rpc->data_to_user, 0);
+	mutex_init(&rpc->out_sync);
+	mutex_init(&rpc->in_sync);
 	atomic_set(&rpc->used, 0);
 	tee->rpc = rpc;
 	return 0;

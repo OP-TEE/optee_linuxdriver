@@ -15,10 +15,8 @@ static ssize_t dump_show(struct device *device,
 	char *tmp_buf;
 
 	tmp_buf = kzalloc(PAGE_SIZE, GFP_KERNEL);
-	if (!tmp_buf) {
-		printk(KERN_ALERT "%s : Unable to get buf memory\n", __func__);
+	if (!tmp_buf)
 		return -ENOMEM;
-	}
 
 	len = tee_context_dump(tee, tmp_buf, PAGE_SIZE - 128);
 
@@ -137,14 +135,11 @@ static ssize_t tee_show_state(struct device *device,
 			tee->state);
 }
 
-/*
- * In the following, 0660 is (S_IWUGO | S_IRUGO)
- */
 static struct device_attribute device_attrs[] = {
 	__ATTR_RO(dump),
 	__ATTR_RO(stat),
 	__ATTR_RO(info),
-	__ATTR(test, (0660), test_show, test_store),
+	__ATTR(test, 0660, test_show, test_store),
 	__ATTR(state, S_IRUGO, tee_show_state, NULL),
 	__ATTR(name, S_IRUGO, name_show, NULL),
 	__ATTR(refcount, S_IRUGO, refcount_show, NULL),
@@ -160,7 +155,7 @@ void tee_init_sysfs(struct tee *tee)
 		return;
 
 	if (dev_get_drvdata(tee->miscdev.this_device) != tee) {
-		dev_err(_DEV(tee), "drvdata is not valid\n");
+		tee_err(tee, "drvdata is not valid\n");
 		return;
 	}
 

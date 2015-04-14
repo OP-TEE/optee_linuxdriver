@@ -1,22 +1,6 @@
-CFG_TEE_CORE_CORE_TARGET := armv7
+cflags-y += -Werror
 
-#########################################################################
-# Set Internal Variables                                                #
-# May be modified to match your setup                                   #
-#########################################################################
-CFG_TEE_DRV_DEBUGFS?=0
-CFG_TEE_CORE_LOG_LEVEL?=2
-CFG_TEE_TA_LOG_LEVEL?=2
-
-ccflags-y+=-Werror
-ccflags-y+=-I$(M)/include/linux
-ccflags-y+=-I$(M)/include
-
-ccflags-y+=-DCFG_TEE_DRV_DEBUGFS=${CFG_TEE_DRV_DEBUGFS}
-ccflags-y+=-DCFG_TEE_CORE_LOG_LEVEL=${CFG_TEE_CORE_LOG_LEVEL}
-ccflags-y+=-DCFG_TEE_TA_LOG_LEVEL=${CFG_TEE_TA_LOG_LEVEL}
-
-obj-m += optee.o
+obj-$(CONFIG_OPTEE) += optee.o
 
 optee-objs:=   \
 		tee_core.o  \
@@ -25,8 +9,4 @@ optee-objs:=   \
 		tee_shm.o  \
 		tee_supp_com.o  \
 		tee_sysfs.o \
-		tee_debugfs.o \
-		tee_kernel_api.o \
 		tee_mutex_wait.o
-
-

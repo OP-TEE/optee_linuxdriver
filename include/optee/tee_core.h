@@ -1,4 +1,3 @@
-
 #ifndef __TEE_CORE_DRV_H__
 #define __TEE_CORE_DRV_H__
 
@@ -14,6 +13,17 @@
 #include <linux/types.h>
 
 #include <linux/tee_client_api.h>
+
+#define TEE_DEV(tee) (tee->miscdev.this_device)
+
+#define tee_dbg(tee, format, ...)  \
+	dev_dbg(tee->miscdev.this_device, format, ##__VA_ARGS__)
+#define tee_warn(tee, format, ...)  \
+	dev_warn(tee->miscdev.this_device, format, ##__VA_ARGS__)
+#define tee_err(tee, format, ...)   \
+	dev_err(tee->miscdev.this_device, format, ##__VA_ARGS__)
+
+#define TEE_MAX_CLIENT_NAME (128)
 
 struct tee_cmd_io;
 struct tee_shm_io;
@@ -63,15 +73,13 @@ struct tee {
 	uint32_t test;
 };
 
-#define _DEV(tee) (tee->miscdev.this_device)
-
-#define TEE_MAX_CLIENT_NAME (128)
-
 /**
  * struct tee_context - internal structure to store a TEE context.
  *
  * @tee: tee attached to the tee_context
- * @usr_client: flag to known if the client is user side client
+ * @name: client name
+ * @tgid: tgid of the this client
+ * @usr_client: indicate if the client is user side client
  * @entry: list of tee_context
  * @list_sess: list of tee_session that denotes all tee_session attached
  * @list_shm: list of tee_shm that denotes all tee_shm attached
@@ -103,32 +111,6 @@ struct tee_session {
 	void *priv;
 };
 
-/**
- * struct tee_shm - internal structure to store a shm object.
- *
- * @ctx: tee_context attached to the buffer.
- * @tee: tee attached to the buffer.
- * @dev: device attached to the buffer.
- * @size_req: requested size for the buffer
- * @size_alloc: effective size of the buffer
- * @kaddr: kernel address if mapped kernel side
- * @paddr: physical address
- * @flags: flags which denote the type of the buffer
- * @entry: list of tee_shm
- */
-struct tee_shm {
-	struct list_head entry;
-	struct tee_context *ctx;
-	struct tee *tee;
-	struct device *dev;
-	size_t size_req;
-	size_t size_alloc;
-	void *kaddr;
-	dma_addr_t paddr;
-	uint32_t flags;
-	struct tee_shm *parent;
-};
-
 #define TEE_SHM_MAPPED			0x01000000
 #define TEE_SHM_TEMP			0x02000000
 #define TEE_SHM_FROM_RPC		0x04000000
@@ -142,15 +124,15 @@ struct tee_shm {
 struct tee_data {
 	uint32_t type;
 	uint32_t type_original;
-	TEEC_SharedMemory c_shm[TEEC_CONFIG_PAYLOAD_REF_COUNT];
+	struct teec_shm c_shm[TEEC_CONFIG_PAYLOAD_REF_COUNT];
 	union {
 		struct tee_shm *shm;
-		TEEC_Value value;
+		struct teec_val value;
 	} params[TEEC_CONFIG_PAYLOAD_REF_COUNT];
 };
 
 struct tee_cmd {
-	TEEC_Result err;
+	uint32_t err;
 	uint32_t origin;
 	uint32_t cmd;
 	struct tee_shm *uuid;
@@ -171,16 +153,17 @@ struct tee *tee_core_alloc(struct device *dev, char *name, int id,
 struct tee_ops {
 	struct module *owner;
 	const char *type;
-	int (*start) (struct tee *tee);
-	int (*stop) (struct tee *tee);
-	int (*open) (struct tee_session *sess, struct tee_cmd *cmd);
-	int (*close) (struct tee_session *sess);
-	int (*invoke) (struct tee_session *sess, struct tee_cmd *cmd);
-	int (*cancel) (struct tee_session *sess, struct tee_cmd *cmd);
-	struct tee_shm *(*alloc) (struct tee *tee, size_t size,
+
+	int (*start)(struct tee *tee);
+	int (*stop)(struct tee *tee);
+	int (*open)(struct tee_session *sess, struct tee_cmd *cmd);
+	int (*close)(struct tee_session *sess);
+	int (*invoke)(struct tee_session *sess, struct tee_cmd *cmd);
+	int (*cancel)(struct tee_session *sess, struct tee_cmd *cmd);
+	struct tee_shm *(*alloc)(struct tee *tee, size_t size,
 				  uint32_t flags);
-	void (*free) (struct tee_shm *shm);
-	int (*shm_inc_ref) (struct tee_shm *shm);
+	void (*free)(struct tee_shm *shm);
+	int (*shm_inc_ref)(struct tee_shm *shm);
 };
 
 #endif /* __TEE_CORE_DRV_H__ */
