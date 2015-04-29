@@ -26,8 +26,8 @@ before_script:
   - export PATH=$PATH:$PWD/gcc-linaro-aarch64-linux-gnu-4.9-2014.08_linux/bin
 
   # Download the kernel
-  - git clone --depth 1 -b linux-linaro-lsk git://git.linaro.org/kernel/linux-linaro-stable.git
-  - export DST_KERNEL=$PWD/linux-linaro-stable
+  - git clone --depth 1 --branch v4.1-rc1 git://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git
+  - export DST_KERNEL=$PWD/linux
 
 script:
   # Check coding style
@@ -35,6 +35,7 @@ script:
 
   # Go in the linux kernel repository
   - cd $DST_KERNEL
+  - git reset --hard v4.1-rc1
 
   # arm32 compilation
   - export ARCH=arm

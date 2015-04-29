@@ -360,9 +360,20 @@ static int export_buf(struct tee *tee, struct tee_shm *shm, int *export)
 {
 	struct dma_buf *dmabuf;
 	int ret = 0;
+	/* Temporary fix to support both older and newer kernel versions. */
+#if defined(DEFINE_DMA_BUF_EXPORT_INFO)
+	DEFINE_DMA_BUF_EXPORT_INFO(exp_info);
 
+	exp_info.priv = shm;
+	exp_info.ops = &_tee_shm_dma_buf_ops;
+	exp_info.size = shm->size_alloc;
+	exp_info.flags = O_RDWR;
+
+	dmabuf = dma_buf_export(&exp_info);
+#else
 	dmabuf = dma_buf_export(shm, &_tee_shm_dma_buf_ops, shm->size_alloc,
 				O_RDWR, 0);
+#endif
 	if (IS_ERR_OR_NULL(dmabuf)) {
 		dev_err(_DEV(tee), "%s: dmabuf: couldn't export buffer (%ld)\n",
 			__func__, PTR_ERR(dmabuf));
