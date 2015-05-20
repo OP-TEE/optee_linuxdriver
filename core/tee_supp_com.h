@@ -28,7 +28,6 @@
 #define TEE_RPC_BUFFER		0x00000001
 #define TEE_RPC_VALUE		0x00000002
 #define TEE_RPC_LOAD_TA		0x10000001
-#define TEE_RPC_FREE_TA_WITH_FD	0x10000012
 /*
  * Handled within the driver only
  * Keep aligned with optee_os (secure space)

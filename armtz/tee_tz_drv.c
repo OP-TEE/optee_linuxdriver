@@ -189,18 +189,20 @@ static void handle_rpc_func_cmd_to_supplicant(struct tee_tz *ptee,
 	inv.res = TEEC_ERROR_NOT_IMPLEMENTED;
 	inv.nbr_bf = arg32->num_params;
 	for (n = 0; n < arg32->num_params; n++) {
-		inv.cmds[n].buffer =
-			(void *)(uintptr_t)params[n].u.memref.buf_ptr;
-		inv.cmds[n].size = params[n].u.memref.size;
 		switch (params[n].attr & TEESMC_ATTR_TYPE_MASK) {
 		case TEESMC_ATTR_TYPE_VALUE_INPUT:
-		case TEESMC_ATTR_TYPE_VALUE_OUTPUT:
 		case TEESMC_ATTR_TYPE_VALUE_INOUT:
+			inv.cmds[n].fd = (int)params[n].u.value.a;
+			/* Fall through */
+		case TEESMC_ATTR_TYPE_VALUE_OUTPUT:
 			inv.cmds[n].type = TEE_RPC_VALUE;
 			break;
 		case TEESMC_ATTR_TYPE_MEMREF_INPUT:
 		case TEESMC_ATTR_TYPE_MEMREF_OUTPUT:
 		case TEESMC_ATTR_TYPE_MEMREF_INOUT:
+			inv.cmds[n].buffer =
+				(void *)(uintptr_t)params[n].u.memref.buf_ptr;
+			inv.cmds[n].size = params[n].u.memref.size;
 			inv.cmds[n].type = TEE_RPC_BUFFER;
 			break;
 		default:
@@ -216,9 +218,6 @@ static void handle_rpc_func_cmd_to_supplicant(struct tee_tz *ptee,
 
 	for (n = 0; n < arg32->num_params; n++) {
 		switch (params[n].attr & TEESMC_ATTR_TYPE_MASK) {
-		case TEESMC_ATTR_TYPE_VALUE_INPUT:
-		case TEESMC_ATTR_TYPE_VALUE_OUTPUT:
-		case TEESMC_ATTR_TYPE_VALUE_INOUT:
 		case TEESMC_ATTR_TYPE_MEMREF_OUTPUT:
 		case TEESMC_ATTR_TYPE_MEMREF_INOUT:
 			/*
@@ -230,6 +229,10 @@ static void handle_rpc_func_cmd_to_supplicant(struct tee_tz *ptee,
 			params[n].u.memref.buf_ptr =
 					(uint32_t)(uintptr_t)inv.cmds[n].buffer;
 			params[n].u.memref.size = inv.cmds[n].size;
+			break;
+		case TEESMC_ATTR_TYPE_VALUE_OUTPUT:
+		case TEESMC_ATTR_TYPE_VALUE_INOUT:
+			params[n].u.value.a = inv.cmds[n].fd;
 			break;
 		default:
 			break;
