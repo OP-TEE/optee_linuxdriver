@@ -56,6 +56,7 @@ struct tee_tz {
 	struct tee_rpc_bf *rpc_buffers;
 	bool shm_cached;
 	struct tee_mutex_wait_private mutex_wait;
+	struct tee_wait_queue_private wait_queue;
 };
 
 int tee_smc_call(struct smc_param *param);

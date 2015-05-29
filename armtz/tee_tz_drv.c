@@ -26,6 +26,7 @@
 #include <tee_shm.h>
 #include <tee_supp_com.h>
 #include <tee_mutex_wait.h>
+#include <tee_wait_queue.h>
 
 #include <arm_common/teesmc.h>
 #include <arm_common/teesmc_st.h>
@@ -142,6 +143,44 @@ bad:
 	arg32->ret = TEEC_ERROR_BAD_PARAMETERS;
 }
 
+static void handle_rpc_func_cmd_wait_queue(struct tee_tz *ptee,
+						struct teesmc32_arg *arg32)
+{
+	struct teesmc32_param *params;
+
+	if (arg32->num_params != 2)
+		goto bad;
+
+	params = TEESMC32_GET_PARAMS(arg32);
+
+	if ((params[0].attr & TEESMC_ATTR_TYPE_MASK) !=
+			TEESMC_ATTR_TYPE_VALUE_INPUT)
+		goto bad;
+	if ((params[1].attr & TEESMC_ATTR_TYPE_MASK) !=
+			TEESMC_ATTR_TYPE_NONE)
+		goto bad;
+
+	switch (arg32->cmd) {
+	case TEE_RPC_WAIT_QUEUE_SLEEP:
+		tee_wait_queue_sleep(DEV, &ptee->wait_queue,
+				     params[0].u.value.a);
+		break;
+	case TEE_RPC_WAIT_QUEUE_WAKEUP:
+		tee_wait_queue_wakeup(DEV, &ptee->wait_queue,
+				      params[0].u.value.a);
+		break;
+	default:
+		goto bad;
+	}
+
+	arg32->ret = TEEC_SUCCESS;
+	return;
+bad:
+	arg32->ret = TEEC_ERROR_BAD_PARAMETERS;
+}
+
+
+
 static void handle_rpc_func_cmd_wait(struct teesmc32_arg *arg32)
 {
 	struct teesmc32_param *params;
@@ -251,6 +290,10 @@ static void handle_rpc_func_cmd(struct tee_tz *ptee, u32 parg32)
 	switch (arg32->cmd) {
 	case TEE_RPC_MUTEX_WAIT:
 		handle_rpc_func_cmd_mutex_wait(ptee, arg32);
+		break;
+	case TEE_RPC_WAIT_QUEUE_SLEEP:
+	case TEE_RPC_WAIT_QUEUE_WAKEUP:
+		handle_rpc_func_cmd_wait_queue(ptee, arg32);
 		break;
 	case TEE_RPC_WAIT:
 		handle_rpc_func_cmd_wait(arg32);
@@ -1160,6 +1203,7 @@ static int tz_tee_init(struct platform_device *pdev)
 	init_completion(&ptee->c);
 	ptee->c_waiters = 0;
 
+	tee_wait_queue_init(&ptee->wait_queue);
 	ret = tee_mutex_wait_init(&ptee->mutex_wait);
 
 	if (ret)
@@ -1180,6 +1224,7 @@ static void tz_tee_deinit(struct platform_device *pdev)
 		return;
 
 	tee_mutex_wait_exit(&ptee->mutex_wait);
+	tee_wait_queue_exit(&ptee->wait_queue);
 
 	dev_dbg(tee->dev, "%s: dev=%s, Secure armv7 started=%d\n", __func__,
 		 tee->name, ptee->started);
