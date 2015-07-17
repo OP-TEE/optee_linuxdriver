@@ -480,7 +480,7 @@ static void set_params(struct tee_tz *ptee,
 		struct tee_data *data)
 {
 	size_t n;
-	struct tee_shm **shm;
+	struct tee_shm *shm;
 	TEEC_Value *value;
 
 	for (n = 0; n < TEEC_CONFIG_PAYLOAD_REF_COUNT; n++) {
@@ -495,10 +495,10 @@ static void set_params(struct tee_tz *ptee,
 			params32[n].u.value.b = value->b;
 			continue;
 		}
-		shm = (struct tee_shm **)&data->params[n];
+		shm = data->params[n].shm;
 		params32[n].attr |= get_cache_attrs(ptee);
-		params32[n].u.memref.buf_ptr = (*shm)->paddr;
-		params32[n].u.memref.size = (*shm)->size_req;
+		params32[n].u.memref.buf_ptr = shm->paddr;
+		params32[n].u.memref.size = shm->size_req;
 	}
 }
 
@@ -506,20 +506,20 @@ static void get_params(struct tee_data *data,
 		struct teesmc32_param params32[TEEC_CONFIG_PAYLOAD_REF_COUNT])
 {
 	size_t n;
-	struct tee_shm **shm;
+	struct tee_shm *shm;
 	TEEC_Value *value;
 
 	for (n = 0; n < TEEC_CONFIG_PAYLOAD_REF_COUNT; n++) {
 		if (params32[n].attr == TEESMC_ATTR_TYPE_NONE)
 			continue;
 		if (params32[n].attr < TEESMC_ATTR_TYPE_MEMREF_INPUT) {
-			value = (TEEC_Value *)&data->params[n];
+			value = &data->params[n].value;
 			value->a = params32[n].u.value.a;
 			value->b = params32[n].u.value.b;
 			continue;
 		}
-		shm = (struct tee_shm **)&data->params[n];
-		(*shm)->size_req = params32[n].u.memref.size;
+		shm = data->params[n].shm;
+		shm->size_req = params32[n].u.memref.size;
 	}
 }
 
