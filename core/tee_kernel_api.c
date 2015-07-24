@@ -24,7 +24,7 @@
 #include "tee_shm.h"
 #include "tee_supp_com.h"
 
-#define TEE_TZ_DEVICE_NAME	"opteearm3200"
+#define TEE_TZ_DEVICE_NAME	"opteearmtz00"
 
 static void reset_tee_cmd(struct tee_cmd_io *cmd)
 {
