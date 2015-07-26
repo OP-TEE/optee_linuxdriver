@@ -184,6 +184,7 @@ int tee_core_del(struct tee *tee);
 
 struct tee *tee_core_alloc(struct device *dev, char *name, int id,
 			   const struct tee_ops *ops, size_t len);
+int tee_core_free(struct tee *tee);
 
 struct tee_ops {
 	struct module *owner;

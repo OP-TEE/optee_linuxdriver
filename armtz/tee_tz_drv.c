@@ -1194,9 +1194,6 @@ static int tz_tee_init(struct platform_device *pdev)
 #endif
 #endif
 
-	tee->shm_flags = TEEC_MEM_INPUT | TEEC_MEM_OUTPUT;
-	tee->test = 0;
-
 	ptee->started = false;
 	ptee->sess_id = 0xAB000000;
 	mutex_init(&ptee->mutex);
@@ -1257,11 +1254,11 @@ static int tz_tee_probe(struct platform_device *pdev)
 
 	ret = tz_tee_init(pdev);
 	if (ret)
-		goto bail1;
+		goto bail0;
 
 	ret = tee_core_add(tee);
 	if (ret)
-		goto bail0;
+		goto bail1;
 
 #ifdef _TEE_DEBUG
 	pr_debug("- tee=%p, id=%d, iminor=%d\n", tee, tee->id,
@@ -1272,6 +1269,7 @@ static int tz_tee_probe(struct platform_device *pdev)
 bail1:
 	tz_tee_deinit(pdev);
 bail0:
+	tee_core_free(tee);
 	return ret;
 }
 

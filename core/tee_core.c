@@ -449,12 +449,24 @@ struct tee *tee_core_alloc(struct device *dev, char *name, int id,
 	INIT_LIST_HEAD(&tee->list_rpc_shm);
 
 	tee->state = TEE_OFFLINE;
+	tee->shm_flags = TEEC_MEM_INPUT | TEEC_MEM_OUTPUT;
+	tee->test = 0;
 
 	tee_supp_init(tee);
 
 	return tee;
 }
 EXPORT_SYMBOL(tee_core_alloc);
+
+int tee_core_free(struct tee *tee)
+{
+	if (tee) {
+		tee_supp_deinit(tee);
+		devm_kfree(tee->dev, tee);
+	}
+	return 0;
+}
+EXPORT_SYMBOL(tee_core_free);
 
 int tee_core_add(struct tee *tee)
 {
@@ -496,8 +508,6 @@ int tee_core_del(struct tee *tee)
 		pr_info("TEE Core: Destroy the misc device \"%s\" (id=%d)\n",
 			dev_name(tee->miscdev.this_device), tee->id);
 
-		tee_supp_deinit(tee);
-
 		tee_cleanup_sysfs(tee);
 		tee_delete_debug_dir(tee);
 
@@ -507,6 +517,8 @@ int tee_core_del(struct tee *tee)
 			misc_deregister(&tee->miscdev);
 		}
 	}
+
+	tee_core_free(tee);
 
 	return 0;
 }

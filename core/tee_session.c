@@ -415,6 +415,7 @@ struct tee_session *tee_session_create_and_open(struct tee_context *ctx,
 	if (!sess) {
 		dev_err(_DEV(tee), "%s: tee_session allocation() failed\n",
 			__func__);
+		tee_put(tee);
 		return ERR_PTR(-ENOMEM);
 	}
 
