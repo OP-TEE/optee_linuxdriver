@@ -368,24 +368,33 @@ static long tee_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 {
 	int ret = -EINVAL;
 	struct tee_context *ctx = filp->private_data;
+	void __user *u_arg;
 
 	BUG_ON(!ctx);
 	BUG_ON(!ctx->tee);
 
 	dev_dbg(_DEV(ctx->tee), "%s: > cmd nr=%d\n", __func__, _IOC_NR(cmd));
 
+#ifdef CONFIG_COMPAT
+	if (is_compat_task())
+		u_arg = compat_ptr(arg);
+	else
+		u_arg = (void __user *)arg;
+#else
+	u_arg = (void __user *)arg;
+#endif
+
 	switch (cmd) {
 	case TEE_OPEN_SESSION_IOC:
-		ret =
-		    tee_do_create_session(ctx, (struct tee_cmd_io __user *)arg);
+		ret = tee_do_create_session(ctx,
+				(struct tee_cmd_io __user *)u_arg);
 		break;
 	case TEE_ALLOC_SHM_IOC:
-		ret = tee_do_shm_alloc(ctx, (struct tee_shm_io __user *)arg);
+		ret = tee_do_shm_alloc(ctx, (struct tee_shm_io __user *)u_arg);
 		break;
 	case TEE_GET_FD_FOR_RPC_SHM_IOC:
-		ret =
-		    tee_do_get_fd_for_rpc_shm(ctx,
-					      (struct tee_shm_io __user *)arg);
+		ret = tee_do_get_fd_for_rpc_shm(ctx,
+				 (struct tee_shm_io __user *)u_arg);
 		break;
 	default:
 		ret = -ENOSYS;
@@ -403,6 +412,9 @@ const struct file_operations tee_fops = {
 	.write = tee_supp_write,
 	.open = tee_ctx_open,
 	.release = tee_ctx_release,
+#ifdef CONFIG_COMPAT
+	.compat_ioctl = tee_ioctl,
+#endif
 	.unlocked_ioctl = tee_ioctl
 };
 

@@ -397,8 +397,6 @@ int tee_shm_alloc_io(struct tee_context *ctx, struct tee_shm_io *shm_io)
 
 	if (ctx->usr_client)
 		shm_io->fd_shm = 0;
-	else
-		shm_io->ptr = NULL;
 
 	shm = tee_shm_alloc(tee, shm_io->size, shm_io->flags);
 	if (IS_ERR_OR_NULL(shm)) {
@@ -416,8 +414,7 @@ int tee_shm_alloc_io(struct tee_context *ctx, struct tee_shm_io *shm_io)
 		}
 
 		shm->flags |= TEEC_MEM_DMABUF;
-	} else
-		shm_io->ptr = shm;
+	}
 
 	shm->ctx = ctx;
 	shm->dev = get_device(_DEV(tee));

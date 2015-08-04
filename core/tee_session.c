@@ -359,6 +359,9 @@ static int tee_session_release(struct inode *inode, struct file *filp)
 
 const struct file_operations tee_session_fops = {
 	.owner = THIS_MODULE,
+#ifdef CONFIG_COMPAT
+	.compat_ioctl = tee_session_ioctl,
+#endif
 	.unlocked_ioctl = tee_session_ioctl,
 	.release = tee_session_release,
 };
@@ -727,8 +730,7 @@ static void _update_client_tee_cmd(struct tee_session *sess,
 				dev_dbg(_DEV_TEE,
 					"Size has been updated by the TA %zd != %zd\n",
 					size_new,
-					cmd_io->op->params[idx].tmpref.
-					size);
+					cmd_io->op->params[idx].tmpref.size);
 				tee_put_user(ctx, size_new,
 				     &cmd_io->op->params[idx].tmpref.size);
 			}
@@ -741,8 +743,7 @@ static void _update_client_tee_cmd(struct tee_session *sess,
 				dev_err(_DEV_TEE,
 					"  *** Wrong returned size from %d:%zd > %zd\n",
 					idx, size_new,
-					cmd_io->op->params[idx].tmpref.
-					size);
+					cmd_io->op->params[idx].tmpref.size);
 
 			else if (tee_copy_to_user
 				 (ctx,
