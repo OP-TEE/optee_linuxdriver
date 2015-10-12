@@ -397,7 +397,7 @@ static long tee_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 	return ret;
 }
 
-const struct file_operations tee_fops = {
+const struct file_operations tee_dev_fops = {
 	.owner = THIS_MODULE,
 	.read = tee_supp_read,
 	.write = tee_supp_write,
@@ -441,7 +441,7 @@ struct tee *tee_core_alloc(struct device *dev, char *name, int id,
 	tee->miscdev.parent = dev;
 	tee->miscdev.minor = MISC_DYNAMIC_MINOR;
 	tee->miscdev.name = tee->name;
-	tee->miscdev.fops = &tee_fops;
+	tee->miscdev.fops = &tee_dev_fops;
 
 	mutex_init(&tee->lock);
 	atomic_set(&tee->refcount, 0);
