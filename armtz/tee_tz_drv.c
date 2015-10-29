@@ -410,9 +410,9 @@ static void call_tee(struct tee_tz *ptee,
 		tee_smc_call(&param);
 		ret = param.a0;
 
-		if (ret == TEESMC_RETURN_EBUSY) {
+		if (ret == TEESMC_RETURN_ETHREAD_LIMIT) {
 			/*
-			 * Since secure world returned busy, release the
+			 * Since secure world is out of threads, release the
 			 * lock we had when entering this function and wait
 			 * for "something to happen" (something else to
 			 * exit from secure world and needed resources may
