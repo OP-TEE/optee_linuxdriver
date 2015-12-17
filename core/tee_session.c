@@ -388,11 +388,11 @@ int tee_session_close_and_destroy(struct tee_session *sess)
 	mutex_lock(&sess->ctx->tee->lock);
 	tee_dec_stats(&tee->stats[TEE_STATS_SESSION_IDX]);
 	list_del(&sess->entry);
-	mutex_unlock(&sess->ctx->tee->lock);
 
 	devm_kfree(_DEV(tee), sess);
 	tee_context_put(ctx);
 	tee_put(tee);
+	mutex_unlock(&sess->ctx->tee->lock);
 
 	dev_dbg(_DEV(tee), "%s: <\n", __func__);
 	return ret;
@@ -426,6 +426,7 @@ struct tee_session *tee_session_create_and_open(struct tee_context *ctx,
 	sess->ctx = ctx;
 
 	ret = tee_session_open_be(sess, cmd_io);
+	mutex_lock(&tee->lock);
 	if (ret || !sess->sessid || cmd_io->err) {
 		dev_err(_DEV(tee), "%s: ERROR ret=%d (err=0x%08x, org=%d,  sessid=0x%08x)\n",
 				__func__, ret, cmd_io->err,
@@ -433,13 +434,13 @@ struct tee_session *tee_session_create_and_open(struct tee_context *ctx,
 		tee_put(tee);
 		tee_context_put(ctx);
 		devm_kfree(_DEV(tee), sess);
+		mutex_unlock(&tee->lock);
 		if (ret)
 			return ERR_PTR(ret);
 		else
 			return NULL;
 	}
 
-	mutex_lock(&tee->lock);
 	tee_inc_stats(&tee->stats[TEE_STATS_SESSION_IDX]);
 	list_add_tail(&sess->entry, &ctx->list_sess);
 	mutex_unlock(&tee->lock);
