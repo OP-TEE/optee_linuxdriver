@@ -88,6 +88,7 @@ struct tee_rpc {
 	struct tee_rpc_invoke commFromUser;
 	struct semaphore datatouser;
 	struct semaphore datafromuser;
+	struct mutex thrd_mutex; /* Block the thread to wait for supp answer */
 	struct mutex outsync; /* Out sync mutex */
 	struct mutex insync; /* In sync mutex */
 	struct mutex reqsync; /* Request sync mutex */
