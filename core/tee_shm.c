@@ -64,17 +64,19 @@ out:
 
 void tee_shm_free_from_rpc(struct tee_shm *shm)
 {
+	struct tee *tee;
+
 	if (shm == NULL)
 		return;
-
-	mutex_lock(&shm->tee->lock);
+	tee = shm->tee;
+	mutex_lock(&tee->lock);
 	if (shm->ctx == NULL) {
 		tee_dec_stats(&shm->tee->stats[TEE_STATS_SHM_IDX]);
 		list_del(&shm->entry);
 	}
 
 	tee_shm_free(shm);
-	mutex_unlock(&shm->tee->lock);
+	mutex_unlock(&tee->lock);
 }
 
 struct tee_shm *tee_shm_alloc(struct tee *tee, size_t size, uint32_t flags)
