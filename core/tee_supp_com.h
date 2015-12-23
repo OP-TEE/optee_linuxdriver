@@ -42,6 +42,10 @@
 #define TEE_MUTEX_WAIT_WAKEUP	1
 #define TEE_MUTEX_WAIT_DELETE	2
 
+#define TEE_RPC_FREE_TA		0x10000009
+#define TEE_RPC_FS		0x10000010
+#define TEE_RPC_LOAD_TA2	0x10000012
+
 #include <linux/semaphore.h>
 
 /**

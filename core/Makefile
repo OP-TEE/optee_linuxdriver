@@ -8,6 +8,7 @@ CFG_TEE_DRV_DEBUGFS?=0
 CFG_TEE_CORE_LOG_LEVEL?=2
 CFG_TEE_TA_LOG_LEVEL?=2
 
+ccflags-y+=-O0
 ccflags-y+=-Werror
 ccflags-y+=-I$(M)/include/linux
 ccflags-y+=-I$(M)/include

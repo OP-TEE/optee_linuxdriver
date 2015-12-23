@@ -14,23 +14,23 @@
 
 	.text
 
-#define SMC_PARAM_X0_OFFS	0
-#define SMC_PARAM_X2_OFFS	16
-#define SMC_PARAM_X4_OFFS	32
-#define SMC_PARAM_X6_OFFS	48
+#define SMC_PARAM_W0_OFFS	0
+#define SMC_PARAM_W2_OFFS	8
+#define SMC_PARAM_W4_OFFS	16
+#define SMC_PARAM_W6_OFFS	24
 
 	/* void tee_smc_call(struct smc_param *param); */
 	.globl	tee_smc_call
 ENTRY(tee_smc_call)
 	stp	x28, x30, [sp, #-16]!
 	mov	x28, x0
-	ldp	x0, x1, [x28, #SMC_PARAM_X0_OFFS]
-	ldp	x2, x3, [x28, #SMC_PARAM_X2_OFFS]
-	ldp	x4, x5, [x28, #SMC_PARAM_X4_OFFS]
-	ldp	x6, x7, [x28, #SMC_PARAM_X6_OFFS]
+	ldp	w0, w1, [x28, #SMC_PARAM_W0_OFFS]
+	ldp	w2, w3, [x28, #SMC_PARAM_W2_OFFS]
+	ldp	w4, w5, [x28, #SMC_PARAM_W4_OFFS]
+	ldp	w6, w7, [x28, #SMC_PARAM_W6_OFFS]
 	smc	#0
-	stp	x0, x1, [x28, #SMC_PARAM_X0_OFFS]
-	stp	x2, x3, [x28, #SMC_PARAM_X2_OFFS]
+	stp	w0, w1, [x28, #SMC_PARAM_W0_OFFS]
+	stp	w2, w3, [x28, #SMC_PARAM_W2_OFFS]
 	ldp	x28, x30, [sp], #16
 	ret
 ENDPROC(tee_smc_call)

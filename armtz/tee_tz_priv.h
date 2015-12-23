@@ -17,7 +17,6 @@ struct tee;
 struct shm_pool;
 struct tee_rpc_bf;
 
-#ifdef CONFIG_ARM
 struct smc_param {
 	uint32_t a0;
 	uint32_t a1;
@@ -28,19 +27,6 @@ struct smc_param {
 	uint32_t a6;
 	uint32_t a7;
 };
-#endif
-#ifdef CONFIG_ARM64
-struct smc_param {
-	uint64_t a0;
-	uint64_t a1;
-	uint64_t a2;
-	uint64_t a3;
-	uint64_t a4;
-	uint64_t a5;
-	uint64_t a6;
-	uint64_t a7;
-};
-#endif
 
 struct tee_tz {
 	uint32_t sess_id;
