@@ -385,14 +385,14 @@ int tee_session_close_and_destroy(struct tee_session *sess)
 
 	ret = tee_session_close_be(sess);
 
-	mutex_lock(&sess->ctx->tee->lock);
+	mutex_lock(&tee->lock);
 	tee_dec_stats(&tee->stats[TEE_STATS_SESSION_IDX]);
 	list_del(&sess->entry);
 
 	devm_kfree(_DEV(tee), sess);
 	tee_context_put(ctx);
 	tee_put(tee);
-	mutex_unlock(&sess->ctx->tee->lock);
+	mutex_unlock(&tee->lock);
 
 	dev_dbg(_DEV(tee), "%s: <\n", __func__);
 	return ret;
