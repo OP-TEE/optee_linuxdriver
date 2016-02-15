@@ -759,6 +759,7 @@ static void _update_client_tee_cmd(struct tee_session *sess,
 		case TEEC_MEMREF_PARTIAL_OUTPUT:
 		case TEEC_MEMREF_PARTIAL_INOUT:
 		case TEEC_MEMREF_WHOLE:
+			parent = &cmd->param.c_shm[idx];
 			if (type == TEEC_MEMREF_WHOLE) {
 				offset = 0;
 				size = parent->size;
@@ -766,7 +767,6 @@ static void _update_client_tee_cmd(struct tee_session *sess,
 				offset = cmd_io->op->params[idx].memref.offset;
 				size = cmd_io->op->params[idx].memref.size;
 			}
-			parent = &cmd->param.c_shm[idx];
 
 			/* Returned updated size */
 			size_new = cmd->param.params[idx].shm->size_req;
