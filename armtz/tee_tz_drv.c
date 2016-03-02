@@ -1221,7 +1221,7 @@ static int tz_tee_probe(struct platform_device *pdev)
 		pdev->name, pdev->id, dev_name(dev));
 #ifdef _TEE_DEBUG
 	pr_debug("- dev=%p\n", dev);
-	pr_debug("- dev->parent=%p\n", dev->ctx);
+	pr_debug("- dev->parent=%p\n", dev->parent);
 	pr_debug("- dev->driver=%p\n", dev->driver);
 #endif
 
