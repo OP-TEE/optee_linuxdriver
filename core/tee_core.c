@@ -406,7 +406,7 @@ static long tee_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 	return ret;
 }
 
-const struct file_operations tee_fops = {
+static const struct file_operations tee_fops = {
 	.owner = THIS_MODULE,
 	.read = tee_supp_read,
 	.write = tee_supp_write,

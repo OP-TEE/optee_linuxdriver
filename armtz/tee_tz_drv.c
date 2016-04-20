@@ -1143,7 +1143,7 @@ static int tz_stop(struct tee *tee)
 
 /******************************************************************************/
 
-const struct tee_ops tee_fops = {
+static const struct tee_ops tee_fops = {
 	.type = "tz",
 	.owner = THIS_MODULE,
 	.start = tz_start,
