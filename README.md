@@ -1,4 +1,28 @@
-# OP-TEE Linux Driver
+# OP-TEE Linux Driver - \*\*DEPRECATED\*\*
+
+# 2016-04-17: Driver has been deprecated
+Since the release of [OP-TEE 2.0.0](https://github.com/OP-TEE/optee_os/blob/master/CHANGELOG.md#op-tee---version-200),
+we are no longer using this OP-TEE Linux kernel driver, but we
+will keep it here for reference in case anyone needs it for one
+or another reason. Also, this version of the OP-TEE driver is
+not compatible with OP-TEE 2.0.0 and later. I.e, you cannot use
+this with latest on the other OP-TEE gits like optee_os, optee_client,
+optee_test etc.
+
+The new driver we are using is located here:
+[linaro-swg/linux/tree/optee](https://github.com/linaro-swg/linux/tree/optee).
+Hopefully we will get this driver mainlined at some point in time,
+but for the time being that will be our default OP-TEE driver for
+OP-TEE >= v2.0.0.
+
+Besides that we have also backported the 2.0.0 driver to [LSK 3.18](https://git.linaro.org/kernel/linux-linaro-stable.git/shortlog/refs/heads/v3.18/topic/optee)
+and [LSK 4.4](https://git.linaro.org/kernel/linux-linaro-stable.git/shortlog/refs/heads/v4.4/topic/optee)
+for those that would like to use an older kernel.
+
+Another important patch that has been mainlined and is needed on older kernels
+is the ARM SMCCC patch that could be found here: [14457459f9ca2ff8521686168ea179edc3a56a44] (https://github.com/torvalds/linux/commit/14457459f9ca2ff8521686168ea179edc3a56a44)
+
+# Description
 The optee_linuxdriver git, containing the source code for the TEE driver 
 module in Linux.
 It is distributed under the GPLv2 open-source license. For a general
