@@ -14,7 +14,11 @@
 
 .text
 .balign 4
-.code 32
+#ifdef CONFIG_ARM_THUMB
+.thumb
+#else
+.arm
+#endif
 
 	/* void tee_smc_call(struct smc_param *param); */
 	.globl	tee_smc_call
